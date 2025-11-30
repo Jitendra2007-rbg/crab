@@ -1,0 +1,8 @@
+{
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation"
+  ],
+  "name": "CRAB - Cosmic AI",
+  "description": ""
+}
