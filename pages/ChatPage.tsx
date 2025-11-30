@@ -131,6 +131,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
   // --- Handling Global Dictation ---
   useEffect(() => {
     if (isDictationMode && transcript) {
+        // Overwrite or append based on preference. Here we just set it live.
         setInputText(transcript);
     }
   }, [transcript, isDictationMode]);
@@ -276,7 +277,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
 
       {/* COMMAND DECK INPUT */}
       <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-50">
-          <div className="w-full max-w-2xl bg-white/80 dark:bg-[#1a1c2e]/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-3xl shadow-2xl p-2 transition-all duration-300 hover:shadow-blue-500/10 hover:border-blue-500/30">
+          <div className={`w-full max-w-2xl bg-white/80 dark:bg-[#1a1c2e]/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-3xl shadow-2xl p-2 transition-all duration-300 ${isDictationMode ? 'ring-2 ring-red-500 shadow-red-500/20' : 'hover:shadow-blue-500/10 hover:border-blue-500/30'}`}>
               
               {selectedImage && (
                   <div className="px-4 pt-2 pb-1 flex justify-between items-center animate-slide-up">
@@ -299,7 +300,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                            value={inputText}
                            onChange={(e) => setInputText(e.target.value)}
                            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                           placeholder={isDictationMode ? "Speaking..." : "Type a command..."}
+                           placeholder={isDictationMode ? "Listening..." : "Type a command..."}
                            className="flex-1 bg-transparent py-4 px-2 outline-none text-gray-800 dark:text-gray-100 placeholder-gray-400 text-base"
                        />
                   </div>

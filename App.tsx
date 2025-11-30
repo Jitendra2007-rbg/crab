@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ArrowLeft, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -16,7 +17,6 @@ import { useHealth } from './hooks/useHealth';
 import { generateChatPDF } from './services/pdfService';
 import LoginPage from './pages/LoginPage';
 
-// Global declaration for html2canvas
 declare global {
     interface Window {
         html2canvas: any;
@@ -73,9 +73,9 @@ export default function App() {
   const [sessionTitle, setSessionTitle] = useState("New Chat");
   const [messages, setMessages] = useState<Message[]>([]);
   
-  // Used to debounce commands
   const lastProcessedTranscript = useRef<string>('');
   const processingRef = useRef(false);
+  const lastAiResponseRef = useRef<string>(''); // Track what AI said to avoid loop
 
   // -- Toast Logic --
   const showToast = (msg: string) => {
@@ -100,24 +100,34 @@ export default function App() {
 
   // --- Voice Control Logic ---
 
-  // 1. Auto-Start Listening (Wakeword)
+  // 1. Auto-Start Listening (Wakeword) & Resume on Visibility
   useEffect(() => {
-      // Only auto-listen if user is logged in, assistant is closed, and NOT dictating.
+      // Logic: If user is logged in, we want to be listening for "Hey CRAB"
       if (user && !isListening && !isAssistantOpen && !isSpeaking && !isDictationMode) {
-          const timer = setTimeout(() => {
-              try { startListening(true); } catch(e) {}
-          }, 200);
-          return () => clearTimeout(timer);
+          startListening(true);
       }
+      
+      const handleVisibilityChange = () => {
+          if (document.visibilityState === 'visible') {
+              // FORCE RESTART when app comes to foreground (e.g. back from YouTube)
+              console.log("App foregrounded - restarting listener");
+              startListening(true);
+          }
+      };
+
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+      window.addEventListener('focus', handleVisibilityChange); // Extra redundancy
+
+      return () => {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+          window.removeEventListener('focus', handleVisibilityChange);
+      };
+
   }, [user, isAssistantOpen, isListening, isSpeaking, isDictationMode]); 
 
   // 2. Main Speech Processor
   useEffect(() => {
-    if (!transcript) return;
-    
-    // If Dictating, do NOT process wakewords or commands.
-    // The transcript flows down to ChatPage via props.
-    if (isDictationMode) return;
+    if (!transcript || isDictationMode) return;
 
     const lowerTranscript = transcript.toLowerCase().trim();
     if (!lowerTranscript) return;
@@ -128,34 +138,30 @@ export default function App() {
     // CASE A: Assistant CLOSED -> Listen for Wakeword
     if (!isAssistantOpen) {
         if (lowerTranscript.includes(agentTrigger) || lowerTranscript.includes(wakewordTrigger)) {
-            console.log("Wake word detected");
             setIsAssistantOpen(true);
-            // Don't stop listening completely, just reset to allow immediate command
             resetTranscript(); 
             lastProcessedTranscript.current = '';
             
-            // Short greeting, then listen for command
-            const greeting = "Hi"; 
+            const greeting = "Hi, I'm listening."; 
             speak(greeting, settings.voiceId, () => {
+                 lastAiResponseRef.current = greeting; // Store greeting
                  resetTranscript();
-                 startListening(true);
             });
         }
     } 
     // CASE B: Assistant OPEN -> Conversation Loop
     else {
+        // Debounce: Wait for user to pause slightly (600ms)
         if (
             lowerTranscript !== lastProcessedTranscript.current && 
             !isSpeaking && 
             !processingRef.current
         ) {
-             // Very short delay for snappy response (500ms)
              const timeoutId = setTimeout(() => {
-                 // Check if text stabilized
                  if (transcript.toLowerCase().trim() === lowerTranscript && lowerTranscript.length > 0) {
                      handleAssistantConversation(lowerTranscript);
                  }
-             }, 500); 
+             }, 800); // 800ms debounce
 
              return () => clearTimeout(timeoutId);
         }
@@ -172,13 +178,35 @@ export default function App() {
 
   const handleAssistantConversation = async (rawText: string) => {
       if (processingRef.current) return;
+      
+      // SAFETY CHECK: ECHO CANCELLATION
+      // Normalize comparison (remove punctuation, lowercase)
+      const normInput = rawText.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const normLast = lastAiResponseRef.current.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      
+      // 1. Input contains Output (Standard Echo)
+      // e.g. AI says "Hello", Input catches "Hello how are you"
+      if (normLast.length > 5 && normInput.includes(normLast)) {
+          console.log("Ignored Echo (Full match)");
+          resetTranscript();
+          return;
+      }
+      
+      // 2. Output contains Input (Tail Echo) - ROBUST CHECK
+      // e.g. AI says "How can I help you", Input catches "...help you"
+      // Only do this if input is substantial (>8 chars) to avoid ignoring short commands like "Yes"
+      if (normInput.length > 8 && normLast.includes(normInput)) {
+           console.log("Ignored Echo (Tail match)");
+           resetTranscript();
+           return;
+      }
+      
+      // 3. Exact Duplicate Check (prevents loops)
+      if (rawText === lastProcessedTranscript.current) return;
+
       processingRef.current = true;
       lastProcessedTranscript.current = rawText; 
       
-      // Stop listening while thinking to prevent echoes
-      stopListening(); 
-
-      // Native Checks
       const intent = processNativeCommands(rawText);
       if (intent.type === 'STOP_LISTENING') {
           closeAssistantCleanly();
@@ -192,15 +220,22 @@ export default function App() {
           reply = await handleVoiceChat(rawText);
       }
 
-      // Speak & Restart Loop Immediately
+      // Store response for echo checking next turn
+      lastAiResponseRef.current = reply;
+
       speak(reply, settings.voiceId, () => {
           processingRef.current = false;
           resetTranscript();
-          startListening(true); // Resume listening
       });
   };
 
   const executeNativeIntent = async (intent: ActionIntent): Promise<string> => {
+       const handleLaunch = (callback: () => void) => {
+           // We do NOT want to start listening immediately if we are leaving the app
+           // The visibility listener will handle restart when we return.
+           callback();
+       };
+
        switch (intent.type) {
             case 'READ_SCREEN':
                 const base64 = await captureScreen();
@@ -215,9 +250,11 @@ export default function App() {
             case 'NAVIGATE': 
                 navigate(intent.payload); return `Opening ${intent.payload.toLowerCase()}.`;
             case 'OPEN_APP': 
-                executeExternalLaunch(intent.payload); return `Opening ${intent.payload}`;
+                handleLaunch(() => executeExternalLaunch(intent.payload));
+                return `Opening ${intent.payload}`;
             case 'OPEN_WEBSITE':
-                executeExternalLaunch(intent.payload, true); return `Opening ${intent.payload}`;
+                handleLaunch(() => executeExternalLaunch(intent.payload, true));
+                return `Opening`;
             case 'ADD_REMINDER': 
                 addReminder(intent.payload.text, intent.payload.time || '09:00', intent.payload.date);
                 return `Reminder set.`;
@@ -226,7 +263,8 @@ export default function App() {
                 return `Scheduled.`;
             case 'TOGGLE_SETTING':
                 showToast(`${intent.payload.value ? 'On' : 'Off'}: ${intent.payload.setting}`);
-                return `Done.`;
+                // In a real app, we would bridge to native code here.
+                return `Toggling ${intent.payload.setting}.`;
             case 'SCREENSHOT':
                  showToast("Screenshot captured"); return "Captured.";
             default: return "Done.";
@@ -235,19 +273,20 @@ export default function App() {
 
   const handleVoiceChat = async (text: string): Promise<string> => {
       const userMsg: Message = { id: Date.now().toString(), text, sender: Sender.USER, timestamp: Date.now(), type: 'text' };
-      setMessages(prev => [...prev, userMsg]);
-
+      
       try {
           const actionResponse = await extractActionFromText([...messages, userMsg], text);
           if (actionResponse && actionResponse.hasAction) {
-              return await handleComplexAction(actionResponse, [...messages, userMsg]);
+              const reply = await handleComplexAction(actionResponse, [...messages, userMsg]);
+              setMessages(prev => [...prev, userMsg, { id: Date.now().toString(), text: reply, sender: Sender.BOT, timestamp: Date.now() }]);
+              return reply;
           } else {
               const response = await sendMessageToGemini([...messages, userMsg], text);
-              setMessages(prev => [...prev, { id: Date.now().toString(), text: response, sender: Sender.BOT, timestamp: Date.now() }]);
+              setMessages(prev => [...prev, userMsg, { id: Date.now().toString(), text: response, sender: Sender.BOT, timestamp: Date.now() }]);
               return response;
           }
       } catch (e) {
-          return "Connection error.";
+          return "I'm having trouble connecting.";
       }
   };
 
@@ -264,23 +303,19 @@ export default function App() {
       else if (action.actionType === 'FETCH_WEATHER') {
           const data = await fetchWeather(action.data.location || 'London');
           responseText = action.reply || `${data.temp}° in ${data.location}.`;
-          setMessages([...history, { id: Date.now().toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now(), type: 'weather', metadata: data }]);
       }
       else if (action.actionType === 'FETCH_NEWS') {
           const articles = await fetchNews(action.data.query);
-          responseText = action.reply || `Top headlines.`;
-          setMessages([...history, { id: Date.now().toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now(), type: 'news', metadata: articles }]);
+          responseText = action.reply || `Here are the top headlines.`;
       }
       else if (action.actionType === 'FETCH_STOCK') {
           const stock = await fetchStock(action.data.symbol);
           responseText = action.reply || `${stock.symbol} is ${stock.price}.`;
-          setMessages([...history, { id: Date.now().toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now(), type: 'stock', metadata: stock }]);
       }
       else if (action.actionType === 'FETCH_WEB_SEARCH') {
           const results = await searchWeb(action.data.query);
-          const summary = await sendMessageToGemini(history, `Summarize: ${JSON.stringify(results)}`);
+          const summary = await sendMessageToGemini(history, `Summarize this search result in 1 sentence: ${JSON.stringify(results)}`);
           responseText = summary;
-          setMessages([...history, { id: Date.now().toString(), text: summary, sender: Sender.BOT, timestamp: Date.now(), type: 'research', metadata: results }]);
       }
       return responseText;
   };
@@ -291,7 +326,7 @@ export default function App() {
     else document.documentElement.classList.remove('dark');
   }, [isDarkMode]);
 
-  // --- Text Command Handler ---
+  // --- Text Command Handler (Typing) ---
   const handleTextCommand = async (text: string) => {
     if (!text.trim()) return;
     const intent = processNativeCommands(text);
@@ -341,17 +376,14 @@ export default function App() {
       navigate(AppMode.CHAT); 
   };
 
-  // --- Toggle Dictation from ChatPage ---
   const toggleDictation = () => {
       if (isDictationMode) {
           setIsDictationMode(false);
-          stopListening();
           resetTranscript();
       } else {
-          stopListening(); // Stop Wakeword listener
           setIsDictationMode(true);
           resetTranscript();
-          startListening(true); // Start Dictation listener
+          startListening(true); 
       }
   };
 
@@ -439,7 +471,6 @@ export default function App() {
             logSet={logSet}
             endExercise={endExercise}
 
-            // PASS SPEECH PROPS
             speechTranscript={transcript}
             isSpeechListening={isListening}
             isDictationMode={isDictationMode}

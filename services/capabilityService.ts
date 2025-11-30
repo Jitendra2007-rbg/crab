@@ -23,16 +23,36 @@ export const processNativeCommands = (text: string): ActionIntent => {
         return { type: 'STOP_LISTENING' };
     }
 
+    // --- DEEP SEARCH COMMANDS (YouTube, Spotify, etc) ---
+    // Pattern: "Search for [X] on [Platform]" or "Open [Platform] and search [X]"
+    
+    // YouTube
+    const ytMatch = lower.match(/(?:search for|play|watch|find) (.+) on youtube/i) || lower.match(/youtube.*(?:search|find|play|watch) (.+)/i);
+    if (ytMatch && ytMatch[1]) {
+        const query = ytMatch[1].replace('for', '').trim();
+        return { type: 'OPEN_WEBSITE', payload: `https://www.youtube.com/results?search_query=${encodeURIComponent(query)}` };
+    }
+
+    // Spotify
+    const spotifyMatch = lower.match(/(?:play|listen to) (.+) on spotify/i) || lower.match(/spotify.*(?:play|listen to) (.+)/i);
+    if (spotifyMatch && spotifyMatch[1]) {
+        const query = spotifyMatch[1].trim();
+        // Spotify web search url
+        return { type: 'OPEN_WEBSITE', payload: `https://open.spotify.com/search/${encodeURIComponent(query)}` };
+    }
+
+    // Google
+    const googleMatch = lower.match(/(?:google|search for) (.+)/i);
+    if (lower.startsWith('google ') || (lower.startsWith('search for ') && !lower.includes('youtube') && !lower.includes('spotify'))) {
+        const query = lower.replace(/^(google|search for)\s+/, '');
+        return { type: 'OPEN_WEBSITE', payload: `https://www.google.com/search?q=${encodeURIComponent(query)}` };
+    }
+
+
     // --- EXTERNAL DATA (News/Weather/Stocks) ---
     // Simple heuristic detection. Complex extraction is handled by Gemini (FETCH_... actions)
-    // But we can shortcut simple cases here if we wanted. 
-    // For now, we rely on Gemini to extract "Weather in London" properly.
-    // We only add specific shortcuts that don't require deep NLU.
-    
     if (lower.includes('weather') && !lower.includes('like')) {
-         // "What's the weather like" -> Handled by Gemini usually, but let's pass to generic chat if unsure
-         // or if it's "Weather in X", Gemini does it better.
-         // We'll let Gemini handle the extraction for high accuracy.
+         // Pass to Gemini usually, but we can return NONE to let Gemini handle it
     }
 
     // --- HEALTH & GYM ---
@@ -75,14 +95,15 @@ export const processNativeCommands = (text: string): ActionIntent => {
     }
 
     // --- Hardware / System Controls ---
-    if (lower.includes('turn on wifi') || lower.includes('enable wifi')) return { type: 'TOGGLE_SETTING', payload: { setting: 'wifi', value: true } };
-    if (lower.includes('turn off wifi') || lower.includes('disable wifi')) return { type: 'TOGGLE_SETTING', payload: { setting: 'wifi', value: false } };
+    // Note: In a pure web environment, these are mock actions. In a Capacitor app with plugins, these would map to plugin calls.
+    if (lower.includes('turn on wifi') || lower.includes('enable wifi') || lower.includes('wifi on')) return { type: 'TOGGLE_SETTING', payload: { setting: 'wifi', value: true } };
+    if (lower.includes('turn off wifi') || lower.includes('disable wifi') || lower.includes('wifi off')) return { type: 'TOGGLE_SETTING', payload: { setting: 'wifi', value: false } };
     
-    if (lower.includes('turn on bluetooth') || lower.includes('enable bluetooth')) return { type: 'TOGGLE_SETTING', payload: { setting: 'bluetooth', value: true } };
-    if (lower.includes('turn off bluetooth') || lower.includes('disable bluetooth')) return { type: 'TOGGLE_SETTING', payload: { setting: 'bluetooth', value: false } };
+    if (lower.includes('turn on bluetooth') || lower.includes('enable bluetooth') || lower.includes('bluetooth on')) return { type: 'TOGGLE_SETTING', payload: { setting: 'bluetooth', value: true } };
+    if (lower.includes('turn off bluetooth') || lower.includes('disable bluetooth') || lower.includes('bluetooth off')) return { type: 'TOGGLE_SETTING', payload: { setting: 'bluetooth', value: false } };
 
-    if (lower.includes('turn on flashlight') || lower.includes('flashlight on')) return { type: 'TOGGLE_SETTING', payload: { setting: 'flashlight', value: true } };
-    if (lower.includes('turn off flashlight') || lower.includes('flashlight off')) return { type: 'TOGGLE_SETTING', payload: { setting: 'flashlight', value: false } };
+    if (lower.includes('turn on flashlight') || lower.includes('flashlight on') || lower.includes('torch on')) return { type: 'TOGGLE_SETTING', payload: { setting: 'flashlight', value: true } };
+    if (lower.includes('turn off flashlight') || lower.includes('flashlight off') || lower.includes('torch off')) return { type: 'TOGGLE_SETTING', payload: { setting: 'flashlight', value: false } };
 
     if (lower.includes('take screenshot') || lower.includes('capture screen') || lower.includes('screenshot this')) {
         return { type: 'SCREENSHOT' };
@@ -102,7 +123,7 @@ export const processNativeCommands = (text: string): ActionIntent => {
         return { type: 'NAVIGATE', payload: AppMode.NOTIFICATIONS };
     }
 
-    // --- Web/App Launching ---
+    // --- Web/App Launching (Generic) ---
     if (
         (lower.startsWith('open ') || lower.startsWith('launch ') || lower.startsWith('go to ') || lower.startsWith('start ')) &&
         !lower.includes('?') && 
@@ -172,6 +193,12 @@ export const processNativeCommands = (text: string): ActionIntent => {
 };
 
 export const executeExternalLaunch = (target: string, isWebsite: boolean = false) => {
+    // If it's a full URL (likely from SEARCH command)
+    if (target.startsWith('http')) {
+        window.open(target, '_blank');
+        return;
+    }
+
     if (isWebsite) {
         let url = target.replace(/\s/g, '');
         if (!url.startsWith('http')) url = 'https://' + url;
@@ -180,16 +207,19 @@ export const executeExternalLaunch = (target: string, isWebsite: boolean = false
     }
 
     const name = target.toLowerCase();
+    
+    // App URL Schemes for Mobile
     if (name.includes('google')) window.open('https://google.com', '_blank');
-    else if (name.includes('youtube')) window.open('https://youtube.com', '_blank');
-    else if (name.includes('spotify')) window.open('https://open.spotify.com', '_blank');
+    else if (name.includes('youtube')) window.open('vnd.youtube://', '_blank') || window.open('https://youtube.com', '_blank');
+    else if (name.includes('spotify')) window.open('spotify://', '_blank') || window.open('https://open.spotify.com', '_blank');
     else if (name.includes('maps')) window.open('https://maps.google.com', '_blank');
-    else if (name.includes('instagram')) window.open('https://instagram.com', '_blank');
-    else if (name.includes('twitter') || name.includes('x')) window.open('https://twitter.com', '_blank');
+    else if (name.includes('instagram')) window.open('instagram://', '_blank') || window.open('https://instagram.com', '_blank');
+    else if (name.includes('twitter') || name.includes('x')) window.open('twitter://', '_blank') || window.open('https://twitter.com', '_blank');
     else if (name.includes('whatsapp')) window.open('whatsapp://', '_self');
     else if (name.includes('calculator')) window.open('calculator://', '_self');
     else if (name.includes('camera')) window.open('camera://', '_self');
     else {
+        // Fallback search
         window.open(`https://www.google.com/search?q=${target}`, '_blank');
     }
 };

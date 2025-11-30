@@ -3,29 +3,28 @@ import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
 const getClient = () => {
-  const apiKey = process.env.API_KEY || ''; 
+  // User provided API Key
+  const apiKey = 'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g'; 
   return new GoogleGenAI({ apiKey });
 };
 
 const SYSTEM_INSTRUCTION = `
-You are CRAB (Cosmic Responsive AI Base), an advanced AI assistant.
+You are CRAB (Cosmic Responsive AI Base), an elite AI assistant.
 
-CORE DIRECTIVES:
-1. **ACCURACY & GRAMMAR**: You must ensure PERFECTION in spelling, grammar, and punctuation. Do not use slang unless requested.
-2. **VOICE OPTIMIZED**: For voice interactions, your responses must be CONCISE (1-2 sentences max). Do not read out long lists or markdown formatting like tables.
-3. **FORMATTING**: Use clean formatting for text.
-4. **PERSONALITY**: Helpful, intelligent, and professional.
-5. **JSON**: Do NOT output JSON unless explicitly asked.
+CRITICAL RULES:
+1. **PERFECT ENGLISH**: Your spelling, grammar, and punctuation must be FLAWLESS. Proofread every sentence twice before outputting.
+2. **CONCISE VOICE**: You are speaking in a voice call. Keep answers SHORT (1-2 sentences maximum). Do not read long lists.
+3. **NO MARKDOWN**: Do not use asterisks (*), bolding, or markdown symbols. Plain text only, optimized for Text-to-Speech readers.
+4. **DIRECTNESS**: Answer the user immediately. Do not fluff.
 `;
 
 const ACTION_PARSER_INSTRUCTION = `
-You are the Action Logic. Extract structured data from user input.
+Extract structured data from user input.
 Current Time: ${new Date().toLocaleString()}
 
 Rules:
 1. DETECT actions: SCHEDULE, REMINDER, WEATHER, NEWS, STOCK, WEB_SEARCH.
-2. COMPLEX RECURRENCE: Handle "Medicine every 4 hours" into batch reminders.
-3. OUTPUT JSON ONLY.
+2. OUTPUT JSON ONLY.
 
 Schema:
 {
@@ -43,7 +42,6 @@ export const extractActionFromText = async (
 ): Promise<AIActionResponse | null> => {
     try {
         const client = getClient();
-        // Optimize context size for speed
         const context = history.slice(-2).map(m => `${m.sender}: ${m.text}`).join('\n');
         const prompt = `Context:\n${context}\nInput: "${lastUserText}"\nJSON:`;
 
@@ -52,7 +50,8 @@ export const extractActionFromText = async (
             contents: prompt,
             config: {
                 systemInstruction: ACTION_PARSER_INSTRUCTION,
-                responseMimeType: 'application/json'
+                responseMimeType: 'application/json',
+                temperature: 0.1 // Very low temp for strict JSON parsing
             }
         });
 
@@ -72,7 +71,6 @@ export const sendMessageToGemini = async (
 ): Promise<string> => {
   try {
     const client = getClient();
-    // Reduce history context for faster token processing
     const recentHistory = history.slice(-6).map(msg => 
       `${msg.sender === Sender.USER ? 'User' : 'CRAB'}: ${msg.text}`
     ).join('\n');
@@ -80,6 +78,14 @@ export const sendMessageToGemini = async (
     const prompt = `${recentHistory}\nUser: ${newMessage}\nCRAB:`;
 
     let response;
+
+    // Common config for accuracy
+    const genConfig = {
+        systemInstruction: SYSTEM_INSTRUCTION,
+        temperature: 0.2, // Extremely low temperature to ensure perfect grammar and no hallucinations
+        topK: 40,
+        topP: 0.95,
+    };
 
     if (base64Image) {
         response = await client.models.generateContent({
@@ -90,23 +96,19 @@ export const sendMessageToGemini = async (
                     { text: prompt }
                 ]
             },
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
-            }
+            config: genConfig
         });
     } else {
         response = await client.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: prompt,
-            config: {
-                systemInstruction: SYSTEM_INSTRUCTION,
-            }
+            config: genConfig
         });
     }
 
-    return response.text || "I'm having trouble processing that request.";
+    return response.text || "I didn't catch that.";
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "I'm having trouble connecting to the network right now.";
+    return "I'm having trouble connecting to the network.";
   }
 };

@@ -41,6 +41,15 @@ export const useData = () => {
       localStorage.setItem(`crab_${key}_${user.id}`, JSON.stringify(data));
   };
 
+  const getErrorMessage = (e: any): string => {
+      if (!e) return "Unknown Error";
+      if (typeof e === 'string') return e;
+      if (e.message) return e.message;
+      if (e.error_description) return e.error_description;
+      if (e.details) return e.details;
+      return JSON.stringify(e);
+  };
+
   // --- Fetch & Realtime Effect ---
   useEffect(() => {
     if (!user) {
@@ -154,8 +163,10 @@ export const useData = () => {
         } catch (e: any) {
             console.error("Supabase Load Error:", e);
             // Only switch to local mode on serious errors, not just 'not found'
-            if (e.code !== 'PGRST116') {
-                setDataError("Sync Issue: " + e.message);
+            // PGRST116 is "The result contains 0 rows" which is fine for single() lookups
+            if (e?.code !== 'PGRST116') {
+                const errMsg = getErrorMessage(e);
+                setDataError(`Sync Error: ${errMsg}`);
                 setIsLocalMode(true);
             }
         }
@@ -179,7 +190,8 @@ export const useData = () => {
 
   const handleError = (err: any) => {
       console.error("Data Operation Error:", err);
-      setDataError("Save failed: " + (err.message || "Unknown error"));
+      const msg = getErrorMessage(err);
+      setDataError(`Save failed: ${msg}`);
   };
 
   // --- Actions ---
@@ -374,7 +386,7 @@ export const useData = () => {
             if (error) throw error;
             return data.id;
         }
-      } catch (e) {
+      } catch (e: any) {
           handleError(e);
           return localId;
       }
