@@ -1,7 +1,8 @@
 
 import { WeatherData, NewsArticle, StockData, SearchResult } from '../types';
 
-// API KEYS - Using fallbacks directly to prevent 'process is not defined' errors in browser
+// API KEYS - HARDCODED Fallbacks to prevent Browser Crash
+// In a browser environment, 'process' is not defined.
 const WEATHER_API_KEY = 'demo_key';
 const NEWS_API_KEY = 'demo_key';
 const STOCK_API_KEY = 'demo_key';
@@ -11,7 +12,6 @@ const STOCK_API_KEY = 'demo_key';
  */
 export const fetchWeather = async (city: string): Promise<WeatherData> => {
     try {
-        // Use a real endpoint if key exists, otherwise mock
         if (WEATHER_API_KEY === 'demo_key') throw new Error("Demo Mode");
 
         const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${WEATHER_API_KEY}`);
@@ -112,30 +112,21 @@ export const fetchStock = async (symbol: string): Promise<StockData> => {
     }
 };
 
-/**
- * Performs a web search (Mocked for Demo unless a Search API like Google Custom Search is added)
- */
 export const searchWeb = async (query: string): Promise<SearchResult[]> => {
-    // In production, use Google Custom Search API or Bing Search API here.
-    // Simulating delay for "Research" effect
     await new Promise(resolve => setTimeout(resolve, 1500));
     
     console.log(`Searching web for: ${query}`);
     
-    // Mock Results generator based on query context
     const results: SearchResult[] = [];
     
     if (query.toLowerCase().includes("phone") || query.toLowerCase().includes("iphone") || query.toLowerCase().includes("samsung")) {
         results.push({ title: "Best Smartphones 2024 - TechRadar", snippet: "The best phones right now including iPhone 15 Pro, Samsung S24 Ultra...", url: "https://techradar.com", source: "TechRadar" });
         results.push({ title: "Smartphone Reviews & Ratings", snippet: "Comprehensive reviews of the latest mobile devices...", url: "https://gsmarena.com", source: "GSMArena" });
-        results.push({ title: "Top 10 Mobile Phones", snippet: "A curated list of top performing devices for every budget.", url: "https://cnet.com", source: "CNET" });
     } else if (query.toLowerCase().includes("laptop") || query.toLowerCase().includes("macbook")) {
          results.push({ title: "Best Laptops of 2024", snippet: "Our picks for the best laptops you can buy...", url: "https://theverge.com", source: "The Verge" });
-         results.push({ title: "Laptop Buying Guide", snippet: "How to choose the right laptop for your needs.", url: "https://wired.com", source: "WIRED" });
     } else {
          results.push({ title: `${query} - Wikipedia`, snippet: `${query} is a topic of interest involving...`, url: "https://wikipedia.org", source: "Wikipedia" });
          results.push({ title: `Latest news on ${query}`, snippet: `Recent developments regarding ${query} show significant impact...`, url: "https://cnn.com", source: "CNN" });
-         results.push({ title: `Everything you need to know about ${query}`, snippet: `A deep dive into ${query} and its applications.`, url: "https://medium.com", source: "Medium" });
     }
     
     return results;

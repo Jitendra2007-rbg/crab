@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { User } from '@supabase/supabase-js';
@@ -18,20 +19,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
+    // Check active session safely
+    supabase.auth.getSession()
+        .then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+            setLoading(false);
+        })
+        .catch(err => {
+            console.error("Auth Session Error:", err);
+            // Even if it fails, stop loading so user can try to login again
+            setLoading(false);
+        });
 
     // Listen for auth changes
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user ?? null);
-      if (_event === 'SIGNED_IN' || _event === 'TOKEN_REFRESHED') {
-          // Optional: Force a refresh of data here if needed
-      }
     });
 
     return () => subscription.unsubscribe();
@@ -58,7 +62,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Create initial settings if user was created
     if (data.user) {
-        // Use upsert to avoid error if row already exists (e.g. previous partial signup)
+        // Use upsert to avoid error if row already exists
         await supabase.from('user_settings').upsert({
             user_id: data.user.id,
             agent_name: agentName,

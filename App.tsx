@@ -35,13 +35,18 @@ export default function App() {
   const [historyStack, setHistoryStack] = useState<AppMode[]>(() => {
       try {
           const saved = localStorage.getItem('crab_nav_stack');
-          return saved ? JSON.parse(saved) : [AppMode.CHAT];
+          if (saved) {
+              const parsed = JSON.parse(saved);
+              if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+          }
+          return [AppMode.CHAT];
       } catch {
           return [AppMode.CHAT];
       }
   });
   
-  const currentMode = historyStack[historyStack.length - 1];
+  // FAILSAFE: Ensure we always have a valid mode
+  const currentMode = historyStack.length > 0 ? historyStack[historyStack.length - 1] : AppMode.CHAT;
 
   useEffect(() => {
       localStorage.setItem('crab_nav_stack', JSON.stringify(historyStack));
@@ -122,7 +127,10 @@ export default function App() {
           if (document.visibilityState === 'visible') {
               // FORCE RESTART when app comes to foreground (e.g. back from YouTube)
               console.log("App foregrounded - restarting listener");
-              startListening(true);
+              // Slight delay to ensure browser is ready
+              setTimeout(() => {
+                  startListening(true);
+              }, 100);
           }
       };
 
@@ -196,7 +204,6 @@ export default function App() {
       const normLast = lastAiResponseRef.current.replace(/[^a-z0-9]/gi, '').toLowerCase();
       
       // 1. Input contains Output (Standard Echo)
-      // e.g. AI says "Hello", Input catches "Hello how are you"
       if (normLast.length > 5 && normInput.includes(normLast)) {
           console.log("Ignored Echo (Full match)");
           resetTranscript();
@@ -204,8 +211,6 @@ export default function App() {
       }
       
       // 2. Output contains Input (Tail Echo) - ROBUST CHECK
-      // e.g. AI says "How can I help you", Input catches "...help you"
-      // Only do this if input is substantial (>8 chars) to avoid ignoring short commands like "Yes"
       if (normInput.length > 8 && normLast.includes(normInput)) {
            console.log("Ignored Echo (Tail match)");
            resetTranscript();
@@ -398,7 +403,7 @@ export default function App() {
       }
   };
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-dark-bg font-bold">Loading...</div>;
+  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-dark-bg font-bold text-gray-800 dark:text-white">Loading CRAB...</div>;
   if (!user) return <LoginPage />;
 
   let headerTitle = settings.agentName;
