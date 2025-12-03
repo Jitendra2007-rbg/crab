@@ -30,76 +30,87 @@ export const useSpeech = () => {
   const restartTimerRef = useRef<any>(null);
 
   useEffect(() => {
+    // Safety check for browser support
+    if (typeof window === 'undefined' || !window.speechSynthesis) return;
+
     const loadVoices = () => {
-        const voices = window.speechSynthesis.getVoices();
-        if (voices.length > 0) setAvailableVoices(voices);
+        try {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) setAvailableVoices(voices);
+        } catch (e) {
+            console.warn("Error loading voices:", e);
+        }
     };
     loadVoices();
-    window.speechSynthesis.onvoiceschanged = loadVoices;
-    return () => { window.speechSynthesis.onvoiceschanged = null; };
+    
+    // Safely assign event listener
+    try {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+    } catch (e) {}
+    
+    return () => { 
+        try { window.speechSynthesis.onvoiceschanged = null; } catch(e) {}
+    };
   }, []);
 
   const setupRecognition = useCallback(() => {
-    if (!('webkitSpeechRecognition' in window)) return;
+    if (typeof window === 'undefined' || !('webkitSpeechRecognition' in window)) return;
 
-    const recognition = new (window as any).webkitSpeechRecognition();
-    recognition.continuous = true; 
-    recognition.interimResults = true;
-    recognition.lang = 'en-US';
+    try {
+        const recognition = new (window as any).webkitSpeechRecognition();
+        recognition.continuous = true; 
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
 
-    recognition.onstart = () => {
-        setIsListening(true);
-    };
-    
-    recognition.onresult = (event: any) => {
-      // --- STRICT GATING ---
-      // If AI is speaking OR we are in the cool-down period, IGNORE EVERYTHING.
-      if (isSpeakingRef.current || ignoreInputRef.current) {
-          return; 
-      }
+        recognition.onstart = () => {
+            setIsListening(true);
+        };
+        
+        recognition.onresult = (event: any) => {
+          // --- STRICT GATING ---
+          if (isSpeakingRef.current || ignoreInputRef.current) {
+              return; 
+          }
 
-      let finalTranscript = '';
-      let interimTranscript = '';
+          let finalTranscript = '';
+          let interimTranscript = '';
 
-      for (let i = event.resultIndex; i < event.results.length; ++i) {
-        if (event.results[i].isFinal) {
-          finalTranscript += event.results[i][0].transcript;
-        } else {
-          interimTranscript += event.results[i][0].transcript;
-        }
-      }
-      
-      const t = finalTranscript || interimTranscript;
-      if (t.trim()) {
-          setTranscript(t);
-      }
-    };
+          for (let i = event.resultIndex; i < event.results.length; ++i) {
+            if (event.results[i].isFinal) {
+              finalTranscript += event.results[i][0].transcript;
+            } else {
+              interimTranscript += event.results[i][0].transcript;
+            }
+          }
+          
+          const t = finalTranscript || interimTranscript;
+          if (t.trim()) {
+              setTranscript(t);
+          }
+        };
 
-    recognition.onerror = (event: any) => {
-      // If not-allowed, we must stop. Otherwise (no-speech, network), we ignore and restart.
-      if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
-          shouldBeListeningRef.current = false;
-          setIsListening(false);
-      } else {
-          // Silent error - will restart in onend
-      }
-    };
+        recognition.onerror = (event: any) => {
+          if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
+              shouldBeListeningRef.current = false;
+              setIsListening(false);
+          }
+        };
 
-    recognition.onend = () => {
-        // Only update state to false if we REALLY stopped
-        if (!shouldBeListeningRef.current) {
-             setIsListening(false);
-        } else {
-             // Aggressive Instant Restart
-             // Do NOT set isListening(false) here to avoid UI blink
-             clearTimeout(restartTimerRef.current);
-             restartTimerRef.current = setTimeout(() => {
-                 try { recognition.start(); } catch(e) {}
-             }, 10);
-        }
-    };
+        recognition.onend = () => {
+            if (!shouldBeListeningRef.current) {
+                 setIsListening(false);
+            } else {
+                 clearTimeout(restartTimerRef.current);
+                 restartTimerRef.current = setTimeout(() => {
+                     try { recognition.start(); } catch(e) {}
+                 }, 10);
+            }
+        };
 
-    recognitionRef.current = recognition;
+        recognitionRef.current = recognition;
+    } catch (e) {
+        console.error("Speech Recognition Setup Error", e);
+    }
   }, []);
 
   useEffect(() => {
@@ -124,10 +135,12 @@ export const useSpeech = () => {
   const startListening = (continuous = true) => {
     shouldBeListeningRef.current = true;
     
-    // Stop any current speech to open the gate
-    window.speechSynthesis.cancel();
+    if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+    }
+    
     isSpeakingRef.current = false;
-    ignoreInputRef.current = false; // Reset gate
+    ignoreInputRef.current = false; 
     setIsSpeaking(false);
 
     try { 
@@ -142,7 +155,9 @@ export const useSpeech = () => {
   };
 
   const cancelSpeech = () => {
-      window.speechSynthesis.cancel();
+      if (window.speechSynthesis) {
+          window.speechSynthesis.cancel();
+      }
       isSpeakingRef.current = false;
       ignoreInputRef.current = false;
       setIsSpeaking(false);
@@ -153,17 +168,15 @@ export const useSpeech = () => {
   };
 
   const speak = (text: string, voiceId?: string, onEnd?: () => void) => {
-    if (!('speechSynthesis' in window)) {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
         if (onEnd) onEnd();
         return;
     }
 
     // 1. ENGAGE GATES
     isSpeakingRef.current = true; 
-    ignoreInputRef.current = true; // Block input immediately
+    ignoreInputRef.current = true; 
     setIsSpeaking(true);
-    
-    // 2. Clear Transcript to prevent processing old text
     setTranscript(''); 
 
     window.speechSynthesis.cancel();
@@ -176,9 +189,6 @@ export const useSpeech = () => {
         isSpeakingRef.current = false;
         setIsSpeaking(false);
         
-        // 3. COOL-DOWN PERIOD
-        // Wait 1 second AFTER speech ends before listening again.
-        // This prevents the tail-end echo ("...help you") from triggering a loop.
         setTimeout(() => {
             ignoreInputRef.current = false;
             if (onEnd) onEnd();
@@ -192,7 +202,11 @@ export const useSpeech = () => {
     };
     
     // Voice Selection
-    const voices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    let voices: SpeechSynthesisVoice[] = [];
+    try {
+        voices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
+    } catch(e) {}
+
     const presetId = voiceId && VOICE_PRESETS[voiceId] ? voiceId : 'Cosmic';
     const preset = VOICE_PRESETS[presetId];
 

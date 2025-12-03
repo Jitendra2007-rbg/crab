@@ -72,7 +72,7 @@ export default function App() {
       settings, updateSettings
   } = useData();
 
-  // -- Global Speech Hook --
+  // -- GlobalSpeech Hook --
   const { 
       isListening, transcript, setTranscript, resetTranscript,
       startListening, stopListening, speak, cancelSpeech, isSpeaking 
@@ -126,7 +126,6 @@ export default function App() {
       const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
               // FORCE RESTART when app comes to foreground (e.g. back from YouTube)
-              console.log("App foregrounded - restarting listener");
               // Slight delay to ensure browser is ready
               setTimeout(() => {
                   startListening(true);
@@ -200,8 +199,9 @@ export default function App() {
       
       // SAFETY CHECK: ECHO CANCELLATION
       // Normalize comparison (remove punctuation, lowercase)
+      const lastAi = lastAiResponseRef.current || '';
       const normInput = rawText.replace(/[^a-z0-9]/gi, '').toLowerCase();
-      const normLast = lastAiResponseRef.current.replace(/[^a-z0-9]/gi, '').toLowerCase();
+      const normLast = lastAi.replace(/[^a-z0-9]/gi, '').toLowerCase();
       
       // 1. Input contains Output (Standard Echo)
       if (normLast.length > 5 && normInput.includes(normLast)) {

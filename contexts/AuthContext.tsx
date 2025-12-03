@@ -19,26 +19,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Check active session safely
-    supabase.auth.getSession()
-        .then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            setLoading(false);
-        })
-        .catch(err => {
-            console.error("Auth Session Error:", err);
-            // Even if it fails, stop loading so user can try to login again
-            setLoading(false);
-        });
+    let mounted = true;
 
-    // Listen for auth changes
+    const initSession = async () => {
+        try {
+            // Race condition: If Supabase takes > 3 seconds, assume offline/error and load app
+            const sessionPromise = supabase.auth.getSession();
+            const timeoutPromise = new Promise((_, reject) => setTimeout(() => reject("Timeout"), 3000));
+
+            const result: any = await Promise.race([sessionPromise, timeoutPromise]);
+            
+            if (mounted) {
+                if (result && result.data) {
+                    setUser(result.data.session?.user ?? null);
+                }
+                setLoading(false);
+            }
+        } catch (err) {
+            console.error("Auth Init Error (or Timeout):", err);
+            if (mounted) setLoading(false);
+        }
+    };
+
+    initSession();
+
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      setUser(session?.user ?? null);
+      if (mounted) setUser(session?.user ?? null);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+        mounted = false;
+        subscription.unsubscribe();
+    };
   }, []);
 
   const signInWithGoogle = async () => {
@@ -60,9 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     });
     if (error) throw error;
 
-    // Create initial settings if user was created
     if (data.user) {
-        // Use upsert to avoid error if row already exists
         await supabase.from('user_settings').upsert({
             user_id: data.user.id,
             agent_name: agentName,

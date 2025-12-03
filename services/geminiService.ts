@@ -1,11 +1,9 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
 const getClient = () => {
-  // User provided API Key
-  const apiKey = 'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g'; 
-  return new GoogleGenAI({ apiKey });
+  // Use process.env.API_KEY as per guidelines
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 const SYSTEM_INSTRUCTION = `
@@ -88,8 +86,9 @@ export const sendMessageToGemini = async (
     };
 
     if (base64Image) {
+        // Use gemini-2.5-flash for vision tasks (text from image) as per guidelines
         response = await client.models.generateContent({
-            model: 'gemini-2.5-flash-image',
+            model: 'gemini-2.5-flash',
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
