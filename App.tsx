@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ArrowLeft, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -32,9 +31,21 @@ export default function App() {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   
-  // -- Navigation --
-  const [historyStack, setHistoryStack] = useState<AppMode[]>([AppMode.CHAT]);
+  // -- Navigation with Persistence --
+  const [historyStack, setHistoryStack] = useState<AppMode[]>(() => {
+      try {
+          const saved = localStorage.getItem('crab_nav_stack');
+          return saved ? JSON.parse(saved) : [AppMode.CHAT];
+      } catch {
+          return [AppMode.CHAT];
+      }
+  });
+  
   const currentMode = historyStack[historyStack.length - 1];
+
+  useEffect(() => {
+      localStorage.setItem('crab_nav_stack', JSON.stringify(historyStack));
+  }, [historyStack]);
 
   const navigate = (newMode: AppMode) => {
     if (newMode === currentMode) return;

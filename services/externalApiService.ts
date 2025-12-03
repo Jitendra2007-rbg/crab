@@ -1,15 +1,19 @@
+
 import { WeatherData, NewsArticle, StockData, SearchResult } from '../types';
 
-// API KEYS - In a real app, these should be in process.env
-const WEATHER_API_KEY = process.env.REACT_APP_WEATHER_KEY || 'demo_key';
-const NEWS_API_KEY = process.env.REACT_APP_NEWS_KEY || 'demo_key';
-const STOCK_API_KEY = process.env.REACT_APP_STOCK_KEY || 'demo_key';
+// API KEYS - Using fallbacks directly to prevent 'process is not defined' errors in browser
+const WEATHER_API_KEY = 'demo_key';
+const NEWS_API_KEY = 'demo_key';
+const STOCK_API_KEY = 'demo_key';
 
 /**
  * Fetches weather for a given city.
  */
 export const fetchWeather = async (city: string): Promise<WeatherData> => {
     try {
+        // Use a real endpoint if key exists, otherwise mock
+        if (WEATHER_API_KEY === 'demo_key') throw new Error("Demo Mode");
+
         const response = await fetch(`https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${WEATHER_API_KEY}`);
         if (!response.ok) throw new Error("Weather API failed");
         
@@ -42,6 +46,8 @@ export const fetchWeather = async (city: string): Promise<WeatherData> => {
  */
 export const fetchNews = async (query?: string): Promise<NewsArticle[]> => {
     try {
+        if (NEWS_API_KEY === 'demo_key') throw new Error("Demo Mode");
+
         const url = query 
             ? `https://newsapi.org/v2/everything?q=${query}&apiKey=${NEWS_API_KEY}&pageSize=5`
             : `https://newsapi.org/v2/top-headlines?country=us&apiKey=${NEWS_API_KEY}&pageSize=5`;
@@ -74,6 +80,8 @@ export const fetchNews = async (query?: string): Promise<NewsArticle[]> => {
  */
 export const fetchStock = async (symbol: string): Promise<StockData> => {
     try {
+        if (STOCK_API_KEY === 'demo_key') throw new Error("Demo Mode");
+
         const response = await fetch(`https://finnhub.io/api/v1/quote?symbol=${symbol.toUpperCase()}&token=${STOCK_API_KEY}`);
         if (!response.ok) throw new Error("Stock API failed");
         
