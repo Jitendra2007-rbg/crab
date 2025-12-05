@@ -2,7 +2,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { Reminder, ScheduleItem, ChatSession, Message, UserSettings, PlanType } from '../types';
+import { Reminder, ScheduleItem, ChatSession, Message, UserSettings, PlanType, AppFont } from '../types';
 
 export const useData = () => {
   const { user } = useAuth();
@@ -18,10 +18,13 @@ export const useData = () => {
       voiceId: 'Cosmic',
       nameChangeCount: 0,
       plan: 'FREE',
+      font: 'Inter',
       notificationRingtone: 'Default',
       notifyReminders: true,
       notifyUpdates: true,
-      notifyPromos: false
+      notifyPromos: false,
+      enableMic: true,
+      enableLocation: true
   });
   
   // Status State
@@ -83,10 +86,13 @@ export const useData = () => {
                     voiceId: setData.voice_id || 'Cosmic',
                     nameChangeCount: setData.name_change_count || 0,
                     plan: (setData.plan as PlanType) || 'FREE',
+                    font: (setData.font as AppFont) || 'Inter',
                     notificationRingtone: setData.notification_ringtone || 'Default',
                     notifyReminders: setData.notify_reminders !== false,
                     notifyUpdates: setData.notify_updates !== false,
                     notifyPromos: setData.notify_promos === true,
+                    enableMic: setData.enable_mic !== false,
+                    enableLocation: setData.enable_location !== false
                 };
                 setSettings(newSettings);
                 saveLocal('settings', newSettings);
@@ -162,8 +168,6 @@ export const useData = () => {
 
         } catch (e: any) {
             console.error("Supabase Load Error:", e);
-            // Only switch to local mode on serious errors, not just 'not found'
-            // PGRST116 is "The result contains 0 rows" which is fine for single() lookups
             if (e?.code !== 'PGRST116') {
                 const errMsg = getErrorMessage(e);
                 setDataError(`Sync Error: ${errMsg}`);
@@ -221,10 +225,13 @@ export const useData = () => {
               voice_id: settingsToSave.voiceId,
               name_change_count: settingsToSave.nameChangeCount,
               plan: settingsToSave.plan,
+              font: settingsToSave.font,
               notification_ringtone: settingsToSave.notificationRingtone,
               notify_reminders: settingsToSave.notifyReminders,
               notify_updates: settingsToSave.notifyUpdates,
               notify_promos: settingsToSave.notifyPromos,
+              enable_mic: settingsToSave.enableMic,
+              enable_location: settingsToSave.enableLocation,
               updated_at: Date.now()
           });
           if (error) handleError(error);

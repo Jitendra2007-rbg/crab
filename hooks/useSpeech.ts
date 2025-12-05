@@ -30,27 +30,17 @@ export const useSpeech = () => {
   const restartTimerRef = useRef<any>(null);
 
   useEffect(() => {
-    // Safety check for browser support
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
     const loadVoices = () => {
         try {
             const voices = window.speechSynthesis.getVoices();
             if (voices.length > 0) setAvailableVoices(voices);
-        } catch (e) {
-            console.warn("Error loading voices:", e);
-        }
+        } catch (e) {}
     };
     loadVoices();
-    
-    // Safely assign event listener
-    try {
-        window.speechSynthesis.onvoiceschanged = loadVoices;
-    } catch (e) {}
-    
-    return () => { 
-        try { window.speechSynthesis.onvoiceschanged = null; } catch(e) {}
-    };
+    try { window.speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {}
+    return () => { try { window.speechSynthesis.onvoiceschanged = null; } catch(e) {} };
   }, []);
 
   const setupRecognition = useCallback(() => {
@@ -67,10 +57,7 @@ export const useSpeech = () => {
         };
         
         recognition.onresult = (event: any) => {
-          // --- STRICT GATING ---
-          if (isSpeakingRef.current || ignoreInputRef.current) {
-              return; 
-          }
+          if (isSpeakingRef.current || ignoreInputRef.current) return;
 
           let finalTranscript = '';
           let interimTranscript = '';
@@ -93,59 +80,56 @@ export const useSpeech = () => {
           if (event.error === 'not-allowed' || event.error === 'service-not-allowed') {
               shouldBeListeningRef.current = false;
               setIsListening(false);
+          } else {
+              // For network errors or no-speech, we ignore and let it restart
           }
         };
 
         recognition.onend = () => {
-            if (!shouldBeListeningRef.current) {
-                 setIsListening(false);
-            } else {
+            // Instant restart logic
+            if (shouldBeListeningRef.current) {
                  clearTimeout(restartTimerRef.current);
                  restartTimerRef.current = setTimeout(() => {
                      try { recognition.start(); } catch(e) {}
-                 }, 10);
+                 }, 50); // Small delay to prevent CPU hogging
+            } else {
+                 setIsListening(false);
             }
         };
 
         recognitionRef.current = recognition;
     } catch (e) {
-        console.error("Speech Recognition Setup Error", e);
+        console.error("Speech Setup Error", e);
     }
   }, []);
 
   useEffect(() => {
       setupRecognition();
       
-      const handleVisibilityChange = () => {
+      const handleVisibility = () => {
           if (document.visibilityState === 'visible' && shouldBeListeningRef.current) {
-              if (recognitionRef.current) {
-                  try { recognitionRef.current.start(); } catch(e){}
-              }
+               try { recognitionRef.current?.start(); } catch(e){}
           }
       };
       
-      document.addEventListener("visibilitychange", handleVisibilityChange);
+      document.addEventListener("visibilitychange", handleVisibility);
       return () => {
-          document.removeEventListener("visibilitychange", handleVisibilityChange);
+          document.removeEventListener("visibilitychange", handleVisibility);
           shouldBeListeningRef.current = false;
           try { recognitionRef.current?.stop(); } catch(e) {}
       };
   }, [setupRecognition]);
 
   const startListening = (continuous = true) => {
-    shouldBeListeningRef.current = true;
-    
-    if (window.speechSynthesis) {
-        window.speechSynthesis.cancel();
-    }
-    
-    isSpeakingRef.current = false;
-    ignoreInputRef.current = false; 
-    setIsSpeaking(false);
+    if (shouldBeListeningRef.current && isListening) return; // Prevent double start
 
-    try { 
-        recognitionRef.current?.start(); 
-    } catch(e) {}
+    shouldBeListeningRef.current = true;
+    isSpeakingRef.current = false;
+    ignoreInputRef.current = false;
+    
+    if (window.speechSynthesis) window.speechSynthesis.cancel();
+    
+    try { recognitionRef.current?.start(); } catch(e) {}
   };
 
   const stopListening = () => {
@@ -155,9 +139,7 @@ export const useSpeech = () => {
   };
 
   const cancelSpeech = () => {
-      if (window.speechSynthesis) {
-          window.speechSynthesis.cancel();
-      }
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
       isSpeakingRef.current = false;
       ignoreInputRef.current = false;
       setIsSpeaking(false);
@@ -173,7 +155,6 @@ export const useSpeech = () => {
         return;
     }
 
-    // 1. ENGAGE GATES
     isSpeakingRef.current = true; 
     ignoreInputRef.current = true; 
     setIsSpeaking(true);
@@ -181,46 +162,35 @@ export const useSpeech = () => {
 
     window.speechSynthesis.cancel();
     
-    // Remove emojis/markdown before speaking
     const cleanText = text.replace(/[*#]/g, '').replace(/\[.*?\]/g, ''); 
     const utterance = new SpeechSynthesisUtterance(cleanText);
     
     const handleEnd = () => {
         isSpeakingRef.current = false;
         setIsSpeaking(false);
-        
         setTimeout(() => {
             ignoreInputRef.current = false;
             if (onEnd) onEnd();
-        }, 1000);
+        }, 800); // 800ms cooldown after speaking before listening again
     };
 
     utterance.onend = handleEnd;
-    utterance.onerror = (e) => {
-        console.error("TTS Error", e);
-        handleEnd(); 
-    };
+    utterance.onerror = handleEnd;
     
-    // Voice Selection
-    let voices: SpeechSynthesisVoice[] = [];
-    try {
-        voices = availableVoices.length > 0 ? availableVoices : window.speechSynthesis.getVoices();
-    } catch(e) {}
+    // Voice Selection Logic
+    let voices = availableVoices;
+    if (voices.length === 0) {
+        try { voices = window.speechSynthesis.getVoices(); } catch(e) {}
+    }
 
     const presetId = voiceId && VOICE_PRESETS[voiceId] ? voiceId : 'Cosmic';
     const preset = VOICE_PRESETS[presetId];
 
-    let selectedVoice: SpeechSynthesisVoice | undefined;
-    if (voices.length > 0) {
-        for (const term of preset.terms) {
-            const match = voices.find(v => v.name.toLowerCase().includes(term) || v.lang.toLowerCase().includes(term));
-            if (match) {
-                selectedVoice = match;
-                break;
-            }
-        }
-        if (!selectedVoice) selectedVoice = voices[0];
-    }
+    let selectedVoice = voices.find(v => 
+        preset.terms.some(term => v.name.toLowerCase().includes(term) || v.lang.toLowerCase().includes(term))
+    );
+    
+    if (!selectedVoice && voices.length > 0) selectedVoice = voices[0];
 
     if (selectedVoice) utterance.voice = selectedVoice;
     utterance.pitch = preset.pitch;

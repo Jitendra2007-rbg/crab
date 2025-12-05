@@ -19,6 +19,7 @@ export const useHealth = () => {
 
     const isPedometerActive = useRef(false);
     const motionListener = useRef<any>(null);
+    const pendingSaveRef = useRef<boolean>(false);
 
     const calculateMetrics = (steps: number) => {
         return { distance: Math.round(steps * 0.762), calories: Math.round(steps * 0.04) };
@@ -26,16 +27,47 @@ export const useHealth = () => {
 
     const getTodayDate = () => new Date().toISOString().split('T')[0];
 
+    // Load Initial Stats
     useEffect(() => {
-        if (!user) return;
+        if (!user) {
+            setTodayStats({ steps: 0, distance: 0, calories: 0, goal: 10000 });
+            return;
+        }
         
         const loadStats = async () => {
-            const today = getTodayDate();
-            const { data } = await supabase.from('health_stats').select('*').eq('user_id', user.id).eq('date', today).single();
-            if (data) {
-                setTodayStats({ steps: data.steps, distance: data.distance, calories: data.calories, goal: data.goal_steps || 10000 });
-            } else {
-                 await supabase.from('health_stats').insert({ user_id: user.id, date: today, steps: 0, distance: 0, calories: 0 });
+            try {
+                const today = getTodayDate();
+                // Explicitly select columns to ensure we get 'goal'
+                const { data, error } = await supabase
+                    .from('health_stats')
+                    .select('*')
+                    .eq('user_id', user.id)
+                    .eq('date', today)
+                    .maybeSingle();
+
+                if (data) {
+                    setTodayStats({ 
+                        steps: data.steps, 
+                        distance: data.distance, 
+                        calories: data.calories, 
+                        goal: data.goal || 10000 
+                    });
+                } else {
+                    // Create entry for today if it doesn't exist
+                    const { error: insertError } = await supabase.from('health_stats').insert({ 
+                        user_id: user.id, 
+                        date: today, 
+                        steps: 0, 
+                        distance: 0, 
+                        calories: 0,
+                        goal: 10000
+                    });
+                    if (!insertError) {
+                        setTodayStats({ steps: 0, distance: 0, calories: 0, goal: 10000 });
+                    }
+                }
+            } catch (e) {
+                console.error("Health Load Error", e);
             }
         };
 
@@ -49,6 +81,8 @@ export const useHealth = () => {
 
     const initStepCounter = async () => {
          if (isPedometerActive.current) return;
+         
+         // 1. Try Capacitor Pedometer (Native)
          if (Pedometer) {
              try {
                  await Pedometer.start();
@@ -56,12 +90,14 @@ export const useHealth = () => {
                  return;
              } catch (e) {}
          }
+         
+         // 2. Fallback to Web Accelerometer
          startWebPedometer();
     };
 
     const startWebPedometer = () => {
          let lastX = 0, lastY = 0, lastZ = 0;
-         const limit = 3; // Reduced threshold for better web sensitivity
+         const limit = 4; // Sensitivity threshold
          let lastStepTime = 0;
          
          motionListener.current = (event: DeviceMotionEvent) => {
@@ -73,7 +109,7 @@ export const useHealth = () => {
 
              if (delta > limit) {
                  const now = Date.now();
-                 if (now - lastStepTime > 350) { // Debounce
+                 if (now - lastStepTime > 400) { // Debounce steps
                      handleStep(1);
                      lastStepTime = now;
                  }
@@ -102,40 +138,63 @@ export const useHealth = () => {
         setTodayStats(prev => {
             const newSteps = prev.steps + count;
             const metrics = calculateMetrics(newSteps);
+            pendingSaveRef.current = true; // Mark as needing save
+            
+            // Check Goal Notification
+            if (newSteps === prev.goal) {
+                 alert(`🎉 Goal Reached! You hit ${prev.goal} steps.`);
+            }
+            
             return { ...prev, steps: newSteps, ...metrics };
         });
 
+        // Update active gym session if running
         setGymSession(prev => {
             if (!prev.isActive) return prev;
             if (prev.activeExercise === 'Treadmill' || prev.activeExercise === null) {
                 const newSteps = prev.currentSteps + count;
                 const metrics = calculateMetrics(newSteps);
-                return { ...prev, currentSteps: newSteps, currentDistance: metrics.distance, currentCalories: prev.currentCalories + (count * 0.04) };
+                return { 
+                    ...prev, 
+                    currentSteps: newSteps, 
+                    currentDistance: metrics.distance, 
+                    currentCalories: prev.currentCalories + (count * 0.04) 
+                };
             }
             return prev;
         });
     };
 
-    useEffect(() => {
-        let pacerInterval: any;
-        if (gymSession.isActive && (gymSession.activeExercise === 'Treadmill')) {
-            // Auto-pacer for testing/treadmill simulation
-            pacerInterval = setInterval(() => handleStep(1), 600);
+    const updateGoal = async (newGoal: number) => {
+        setTodayStats(prev => ({ ...prev, goal: newGoal }));
+        if (user) {
+            await supabase.from('health_stats')
+                .update({ goal: newGoal })
+                .eq('user_id', user.id)
+                .eq('date', getTodayDate());
         }
-        return () => clearInterval(pacerInterval);
-    }, [gymSession.isActive, gymSession.activeExercise]);
+    };
 
+    // Auto-Save Interval (Every 10 seconds if changes detected)
     useEffect(() => {
-        if (!user || todayStats.steps === 0) return;
-        const saveTimer = setTimeout(async () => {
-             await supabase.from('health_stats').upsert({
-                 user_id: user.id, date: getTodayDate(), steps: todayStats.steps, distance: todayStats.distance, calories: todayStats.calories
-             }, { onConflict: 'user_id, date' });
-        }, 5000); 
-        return () => clearTimeout(saveTimer);
+        if (!user) return;
+        const saveInterval = setInterval(async () => {
+             if (pendingSaveRef.current) {
+                 pendingSaveRef.current = false;
+                 await supabase.from('health_stats').upsert({
+                     user_id: user.id, 
+                     date: getTodayDate(), 
+                     steps: todayStats.steps, 
+                     distance: todayStats.distance, 
+                     calories: todayStats.calories,
+                     goal: todayStats.goal
+                 }, { onConflict: 'user_id, date' });
+             }
+        }, 10000);
+        return () => clearInterval(saveInterval);
     }, [todayStats, user]);
 
-    // Gym Actions (Simplified for brevity but fully functional)
+    // Gym Methods
     const startGym = () => setGymSession({ isActive: true, startTime: Date.now(), currentSteps: 0, currentDistance: 0, currentCalories: 0, activeExercise: null, logs: [] });
     const startExercise = (type: ExerciseType) => setGymSession(prev => ({ ...prev, activeExercise: type }));
     const logSet = (weight: number, reps: number) => {
@@ -159,5 +218,5 @@ export const useHealth = () => {
         return summary;
     };
 
-    return { todayStats, gymSession, startGym, stopGym, startExercise, logSet, endExercise, requestMotionPermission };
+    return { todayStats, gymSession, startGym, stopGym, startExercise, logSet, endExercise, requestMotionPermission, updateGoal };
 };

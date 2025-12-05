@@ -1,6 +1,7 @@
+
 import React, { useState, useEffect } from 'react';
-import { Moon, Sun, User, Volume2, LogOut, Check, Play, CreditCard, Zap, ChevronRight, Lock, Activity, Shield, Bell, Mic, MapPin, ToggleRight, ToggleLeft, Star } from 'lucide-react';
-import { AppMode, UserSettings, PlanType } from '../types';
+import { Moon, Sun, User, Volume2, LogOut, Check, Play, CreditCard, Zap, ChevronRight, Lock, Activity, Shield, Bell, Mic, MapPin, ToggleRight, ToggleLeft, Star, Type } from 'lucide-react';
+import { AppMode, UserSettings, PlanType, AppFont } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { useSpeech } from '../hooks/useSpeech';
 
@@ -22,9 +23,7 @@ interface SettingsPageProps {
 
 // --- SUB COMPONENTS to prevent Hook violations ---
 
-const SecuritySettings = () => {
-    const [micPermission, setMicPermission] = useState(true);
-    const [locPermission, setLocPermission] = useState(false);
+const SecuritySettings = ({ settings, updateSettings }: { settings: UserSettings, updateSettings: (s: UserSettings) => void }) => {
     const { user } = useAuth();
 
     return (
@@ -40,8 +39,8 @@ const SecuritySettings = () => {
                                 <Mic size={20} className="text-black dark:text-white" />
                                 <span className="text-gray-900 dark:text-white font-medium">Microphone</span>
                             </div>
-                            <button onClick={() => setMicPermission(!micPermission)}>
-                                {micPermission ? <ToggleRight size={32} className="text-black dark:text-white" /> : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
+                            <button onClick={() => updateSettings({...settings, enableMic: !settings.enableMic})}>
+                                {settings.enableMic ? <ToggleRight size={32} className="text-green-500" /> : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
                             </button>
                         </div>
                         <div className="flex items-center justify-between">
@@ -49,8 +48,8 @@ const SecuritySettings = () => {
                                 <MapPin size={20} className="text-black dark:text-white" />
                                 <span className="text-gray-900 dark:text-white font-medium">Location</span>
                             </div>
-                            <button onClick={() => setLocPermission(!locPermission)}>
-                                {locPermission ? <ToggleRight size={32} className="text-black dark:text-white" /> : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
+                            <button onClick={() => updateSettings({...settings, enableLocation: !settings.enableLocation})}>
+                                {settings.enableLocation ? <ToggleRight size={32} className="text-green-500" /> : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
                             </button>
                         </div>
                     </div>
@@ -142,7 +141,7 @@ const NotificationSettings = ({ settings, updateSettings }: { settings: UserSett
                         </div>
                         <button onClick={() => updateSettings({...settings, notifyReminders: !settings.notifyReminders})}>
                             {settings.notifyReminders 
-                            ? <ToggleRight size={32} className="text-black dark:text-white" /> 
+                            ? <ToggleRight size={32} className="text-green-500" /> 
                             : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
                         </button>
                     </div>
@@ -154,7 +153,7 @@ const NotificationSettings = ({ settings, updateSettings }: { settings: UserSett
                         </div>
                         <button onClick={() => updateSettings({...settings, notifyUpdates: !settings.notifyUpdates})}>
                             {settings.notifyUpdates
-                            ? <ToggleRight size={32} className="text-black dark:text-white" /> 
+                            ? <ToggleRight size={32} className="text-green-500" /> 
                             : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
                         </button>
                     </div>
@@ -166,7 +165,7 @@ const NotificationSettings = ({ settings, updateSettings }: { settings: UserSett
                         </div>
                         <button onClick={() => updateSettings({...settings, notifyPromos: !settings.notifyPromos})}>
                             {settings.notifyPromos
-                            ? <ToggleRight size={32} className="text-black dark:text-white" /> 
+                            ? <ToggleRight size={32} className="text-green-500" /> 
                             : <ToggleLeft size={32} className="text-gray-300 dark:text-gray-600" />}
                         </button>
                     </div>
@@ -181,7 +180,11 @@ const SubscriptionSettings = ({ settings, updateSettings, isDarkMode, navigate }
     
     const handlePayment = (planName: PlanType, amountInRupees: number) => {
         if (!window.Razorpay) {
-            alert("Payment gateway not loaded.");
+            // Fallback for demo if script blocked
+            if(confirm("Payment Gateway unreachable. Simulate successful payment for demo?")) {
+                updateSettings({ ...settings, plan: planName });
+                alert(`Success! You are now on ${planName} Plan.`);
+            }
             return;
         }
 
@@ -213,6 +216,7 @@ const SubscriptionSettings = ({ settings, updateSettings, isDarkMode, navigate }
             });
             rzp1.open();
         } catch(e) {
+            // If key is invalid or other error
             if(confirm("Dev Mode: Simulate Successful Payment?")) {
                 updateSettings({ ...settings, plan: planName });
             }
@@ -301,7 +305,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ mode, navigate, isDarkMode,
 
   // Router for Settings Sub-Pages
   if (mode === AppMode.SETTINGS_SECURITY) {
-      return <SecuritySettings />;
+      return <SecuritySettings settings={settings} updateSettings={updateSettings} />;
   }
 
   if (mode === AppMode.SETTINGS_NOTIFICATIONS_CONFIG) {
@@ -401,11 +405,15 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ mode, navigate, isDarkMode,
   }
 
   if (mode === AppMode.SETTINGS_CUSTOMIZATION) {
+      const fonts: AppFont[] = ['Inter', 'Roboto Mono', 'Merriweather', 'Quicksand', 'Orbitron'];
+
       return (
           <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-dark-bg animate-slide-in">
              <h2 className="text-xl font-bold mb-6 text-gray-900 dark:text-white">Customization</h2>
-             <div className="bg-white dark:bg-dark-surface rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden">
-                 <div className="p-4 border-b border-gray-100 dark:border-gray-800 flex items-center justify-between">
+             
+             {/* Theme Toggle */}
+             <div className="bg-white dark:bg-dark-surface rounded-2xl border border-gray-100 dark:border-gray-800 overflow-hidden mb-6">
+                 <div className="p-4 flex items-center justify-between">
                      <div className="flex items-center space-x-3">
                          <div className="p-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 rounded-lg">
                              {isDarkMode ? <Moon size={20} /> : <Sun size={20} />}
@@ -423,6 +431,27 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ mode, navigate, isDarkMode,
                      </button>
                  </div>
              </div>
+
+             {/* Font Selector */}
+             <div className="bg-white dark:bg-dark-surface rounded-2xl border border-gray-100 dark:border-gray-800 p-6">
+                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-4 flex items-center space-x-2">
+                     <Type size={14}/>
+                     <span>App Font Style</span>
+                 </h3>
+                 <div className="space-y-2">
+                     {fonts.map(font => (
+                         <button
+                             key={font}
+                             onClick={() => updateSettings({...settings, font})}
+                             className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${settings.font === font ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
+                         >
+                             <span style={{ fontFamily: font }}>{font}</span>
+                             {settings.font === font && <Check size={16} />}
+                         </button>
+                     ))}
+                 </div>
+             </div>
+
           </div>
       );
   }

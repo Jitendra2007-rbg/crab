@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { LogIn, Mail, Lock, AlertCircle, ArrowRight, User } from 'lucide-react';
@@ -51,8 +52,9 @@ const LoginPage: React.FC = () => {
        <div className="w-full max-w-sm animate-fade-in">
            
            <div className="text-center mb-10">
+                {/* Updated Logo Style */}
                 <div className="w-16 h-16 bg-black dark:bg-white rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-xl">
-                    <span className="text-3xl font-bold text-white dark:text-black tracking-tighter">C</span>
+                    <span className="text-3xl font-logo font-black text-white dark:text-black tracking-tighter">C</span>
                 </div>
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2 tracking-tight">
                     {isSignup ? 'Create Account' : 'Welcome Back'}

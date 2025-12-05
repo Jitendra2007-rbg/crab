@@ -1,4 +1,5 @@
 
+
 import React from 'react';
 import { AppMode, Message, Reminder, ScheduleItem, ChatSession, NotificationItem, UserSettings, HealthStats, WorkoutSession, ExerciseType } from './types';
 import ChatPage from './pages/ChatPage';
@@ -9,6 +10,7 @@ import HistoryViewPage from './pages/HistoryViewPage';
 import NotificationsPage from './pages/NotificationsPage';
 import HealthPage from './pages/HealthPage';
 import GymPage from './pages/GymPage';
+import ScannerPage from './pages/ScannerPage';
 import LoginPage from './pages/LoginPage';
 import PageTransition from './components/PageTransition';
 
@@ -20,6 +22,7 @@ interface RouterProps {
   // Chat
   messages: Message[];
   onSendMessage: (text: string) => void;
+  onImageAnalysis: (base64: string, prompt: string) => Promise<string>;
   sessionTitle: string;
   
   // Data props
@@ -73,7 +76,16 @@ const Router: React.FC<RouterProps> = (props) => {
             isListening={props.isSpeechListening}
             isDictationMode={props.isDictationMode}
             toggleDictation={props.toggleDictation}
+            navigate={props.navigate}
           />
+        );
+      
+      case AppMode.SCANNER:
+        return (
+            <ScannerPage 
+                onAnalyze={props.onImageAnalysis}
+                onClose={() => props.navigate(AppMode.CHAT)}
+            />
         );
         
       case AppMode.HISTORY_VIEW:

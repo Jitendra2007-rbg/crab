@@ -208,18 +208,35 @@ export const executeExternalLaunch = (target: string, isWebsite: boolean = false
 
     const name = target.toLowerCase();
     
-    // App URL Schemes for Mobile
-    if (name.includes('google')) window.open('https://google.com', '_blank');
-    else if (name.includes('youtube')) window.open('vnd.youtube://', '_blank') || window.open('https://youtube.com', '_blank');
-    else if (name.includes('spotify')) window.open('spotify://', '_blank') || window.open('https://open.spotify.com', '_blank');
-    else if (name.includes('maps')) window.open('https://maps.google.com', '_blank');
-    else if (name.includes('instagram')) window.open('instagram://', '_blank') || window.open('https://instagram.com', '_blank');
-    else if (name.includes('twitter') || name.includes('x')) window.open('twitter://', '_blank') || window.open('https://twitter.com', '_blank');
-    else if (name.includes('whatsapp')) window.open('whatsapp://', '_self');
-    else if (name.includes('calculator')) window.open('calculator://', '_self');
-    else if (name.includes('camera')) window.open('camera://', '_self');
-    else {
-        // Fallback search
-        window.open(`https://www.google.com/search?q=${target}`, '_blank');
+    // Robust App URL Schemes for Mobile/PWA
+    // Try to open app, fallback to website in new tab
+    if (name.includes('google')) { window.open('https://google.com', '_blank'); return; }
+    if (name.includes('youtube')) { 
+        // Try deep link first
+        window.location.href = 'vnd.youtube://';
+        // Fallback (setTimeout)
+        setTimeout(() => window.open('https://youtube.com', '_blank'), 500);
+        return;
     }
+    if (name.includes('spotify')) {
+        window.location.href = 'spotify://';
+        setTimeout(() => window.open('https://open.spotify.com', '_blank'), 500);
+        return;
+    }
+    if (name.includes('maps')) { window.open('https://maps.google.com', '_blank'); return; }
+    if (name.includes('instagram')) {
+        window.location.href = 'instagram://app';
+        setTimeout(() => window.open('https://instagram.com', '_blank'), 500);
+        return;
+    }
+    if (name.includes('twitter') || name.includes('x')) {
+        window.location.href = 'twitter://';
+        setTimeout(() => window.open('https://twitter.com', '_blank'), 500);
+        return;
+    }
+    if (name.includes('whatsapp')) { window.location.href = 'whatsapp://'; return; }
+    if (name.includes('calculator')) { window.location.href = 'calculator://'; return; }
+    
+    // Fallback search
+    window.open(`https://www.google.com/search?q=${target}`, '_blank');
 };

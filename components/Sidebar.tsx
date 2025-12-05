@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { 
   MessageSquarePlus, 
@@ -10,7 +9,8 @@ import {
   ChevronRight,
   LogOut,
   Settings,
-  Trash2
+  Trash2,
+  Scan
 } from 'lucide-react';
 import { AppMode, ChatSession } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -60,10 +60,10 @@ const Sidebar: React.FC<SidebarProps> = ({
             
             <div className="p-6 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
                 <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-black dark:bg-white rounded-lg flex items-center justify-center">
-                        <span className="font-bold text-white dark:text-black text-lg">C</span>
-                    </div>
-                    <span className="font-bold text-xl tracking-tight text-gray-900 dark:text-white">CRAB</span>
+                    {/* LOGO: Orbitron Font, Black in Light Mode */}
+                    <span className="font-logo font-black text-2xl tracking-widest text-black dark:text-blue-400 drop-shadow-sm">
+                        CRAB
+                    </span>
                 </div>
                 <button 
                     onClick={() => setIsOpen(false)} 
@@ -76,14 +76,15 @@ const Sidebar: React.FC<SidebarProps> = ({
             <div className="p-6 pb-2 space-y-4">
                 <button 
                     onClick={() => { onNewChat(); setIsOpen(false); }}
-                    className="w-full flex items-center justify-center space-x-3 px-4 py-3.5 bg-black dark:bg-white text-white dark:text-black rounded-xl transition-all active:scale-95 shadow-md"
+                    className="w-full flex items-center justify-center space-x-3 px-4 py-3.5 bg-black dark:bg-white text-white dark:text-black rounded-xl transition-all active:scale-95 shadow-md font-bold"
                 >
                     <MessageSquarePlus size={20} strokeWidth={2} />
-                    <span className="font-semibold">New Chat</span>
+                    <span>New Chat</span>
                 </button>
             </div>
 
             <nav className="px-4 py-2 space-y-1">
+                <MenuItem icon={<Scan size={20} />} label="Scanner" onClick={() => handleNav(AppMode.SCANNER)} />
                 <MenuItem icon={<Clock size={20} />} label="Reminders" onClick={() => handleNav(AppMode.REMINDERS)} />
                 <MenuItem icon={<Calendar size={20} />} label="Schedule" onClick={() => handleNav(AppMode.SCHEDULE)} />
                 {/* Settings removed from here, moved to Account bottom section */}

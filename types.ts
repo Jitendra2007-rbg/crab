@@ -39,7 +39,8 @@ export enum AppMode {
   SETTINGS_SECURITY = 'SETTINGS_SECURITY',
   SETTINGS_NOTIFICATIONS_CONFIG = 'SETTINGS_NOTIFICATIONS_CONFIG',
   HEALTH = 'HEALTH',
-  GYM = 'GYM'
+  GYM = 'GYM',
+  SCANNER = 'SCANNER'
 }
 
 export interface Suggestion {
@@ -78,6 +79,7 @@ export interface NotificationItem {
 }
 
 export type PlanType = 'FREE' | 'PRO' | 'ULTRA';
+export type AppFont = 'Inter' | 'Roboto Mono' | 'Merriweather' | 'Quicksand' | 'Orbitron';
 
 export interface UserSettings {
   userName: string; // The user's display name
@@ -86,11 +88,17 @@ export interface UserSettings {
   voiceId: string;
   nameChangeCount: number;
   plan: PlanType;
+  font: AppFont;
+  
   // Notification Config
   notificationRingtone?: string;
   notifyReminders?: boolean;
   notifyUpdates?: boolean;
   notifyPromos?: boolean;
+
+  // Permissions (App Level)
+  enableMic: boolean;
+  enableLocation: boolean;
 }
 
 // Complex AI Action Response

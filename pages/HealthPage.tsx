@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import { Activity, Flame, Footprints, Play, Square, Trophy, ChevronRight, Smartphone } from 'lucide-react';
+import { Activity, Flame, Footprints, Play, Smartphone, Edit2, Check } from 'lucide-react';
 import { HealthStats, WorkoutSession, AppMode } from '../types';
 import { useHealth } from '../hooks/useHealth'; 
 
@@ -11,8 +11,10 @@ interface HealthPageProps {
 }
 
 const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigate }) => {
-  const { requestMotionPermission } = useHealth();
+  const { requestMotionPermission, updateGoal } = useHealth();
   const [permissionGranted, setPermissionGranted] = useState(false);
+  const [isEditingGoal, setIsEditingGoal] = useState(false);
+  const [tempGoal, setTempGoal] = useState(todayStats.goal.toString());
 
   // Calculate Ring Progress
   const progress = Math.min((todayStats.steps / todayStats.goal) * 100, 100);
@@ -23,6 +25,12 @@ const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigat
   const handleEnableSensors = async () => {
       const granted = await requestMotionPermission();
       if (granted) setPermissionGranted(true);
+  };
+
+  const saveGoal = () => {
+      const g = parseInt(tempGoal);
+      if (g > 0) updateGoal(g);
+      setIsEditingGoal(false);
   };
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
@@ -58,7 +66,7 @@ const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigat
                     strokeDasharray={circumference}
                     strokeDashoffset={offset}
                     strokeLinecap="round"
-                    className="text-black dark:text-white transition-all duration-1000 ease-out"
+                    className="text-blue-500 dark:text-blue-400 transition-all duration-1000 ease-out"
                  />
              </svg>
              <div className="absolute flex flex-col items-center">
@@ -66,6 +74,27 @@ const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigat
                  <span className="text-4xl font-bold text-gray-900 dark:text-white">{todayStats.steps.toLocaleString()}</span>
                  <span className="text-xs text-gray-500 uppercase tracking-wider">Steps Today</span>
              </div>
+         </div>
+
+         {/* Goal Editor */}
+         <div className="mt-2 flex items-center space-x-2">
+             <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Goal:</span>
+             {isEditingGoal ? (
+                 <div className="flex items-center space-x-1">
+                     <input 
+                        type="number" 
+                        value={tempGoal} 
+                        onChange={(e) => setTempGoal(e.target.value)}
+                        className="w-16 bg-gray-100 dark:bg-gray-800 rounded px-1 py-0.5 text-sm font-bold outline-none"
+                     />
+                     <button onClick={saveGoal} className="text-green-500"><Check size={16}/></button>
+                 </div>
+             ) : (
+                 <div className="flex items-center space-x-1 cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-800 px-2 py-1 rounded transition-colors" onClick={() => setIsEditingGoal(true)}>
+                     <span className="text-sm font-bold text-gray-700 dark:text-gray-300">{todayStats.goal.toLocaleString()}</span>
+                     <Edit2 size={12} className="text-gray-400" />
+                 </div>
+             )}
          </div>
 
          <div className="grid grid-cols-2 gap-8 mt-6 w-full">
@@ -78,7 +107,7 @@ const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigat
              </div>
              <div className="text-center">
                  <div className="flex items-center justify-center space-x-1 text-gray-500 dark:text-gray-400 mb-1">
-                     <Trophy size={14} />
+                     <Activity size={14} />
                      <span className="text-xs font-bold uppercase">Distance</span>
                  </div>
                  <p className="text-xl font-bold text-gray-900 dark:text-white">{(todayStats.distance / 1000).toFixed(2)} <span className="text-xs font-normal text-gray-400">km</span></p>
@@ -123,23 +152,6 @@ const HealthPage: React.FC<HealthPageProps> = ({ todayStats, gymSession, navigat
               </div>
           </div>
       </button>
-
-      {/* Recent History Stub */}
-      <div className="mt-6">
-          <h3 className="text-sm font-bold text-gray-400 uppercase tracking-wider mb-3">Recent Activity</h3>
-          <div className="bg-white dark:bg-dark-surface rounded-2xl p-4 border border-gray-100 dark:border-gray-800 flex items-center justify-between opacity-60">
-               <div className="flex items-center space-x-3">
-                   <div className="bg-gray-100 dark:bg-gray-800 p-2 rounded-lg text-black dark:text-white">
-                       <Footprints size={18} />
-                   </div>
-                   <div>
-                       <p className="font-bold text-sm text-gray-900 dark:text-white">Morning Walk</p>
-                       <p className="text-xs text-gray-500">Yesterday</p>
-                   </div>
-               </div>
-               <span className="font-mono font-medium text-sm text-gray-900 dark:text-white">2.4 km</span>
-          </div>
-      </div>
 
     </div>
   );

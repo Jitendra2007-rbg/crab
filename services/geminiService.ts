@@ -1,3 +1,4 @@
+
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
@@ -7,13 +8,14 @@ const getClient = () => {
 };
 
 const SYSTEM_INSTRUCTION = `
-You are CRAB (Cosmic Responsive AI Base), an elite AI assistant.
+You are CRAB (Cosmic Responsive AI Base), an advanced and helpful AI assistant.
 
-CRITICAL RULES:
-1. **PERFECT ENGLISH**: Your spelling, grammar, and punctuation must be FLAWLESS. Proofread every sentence twice before outputting.
-2. **CONCISE VOICE**: You are speaking in a voice call. Keep answers SHORT (1-2 sentences maximum). Do not read long lists.
-3. **NO MARKDOWN**: Do not use asterisks (*), bolding, or markdown symbols. Plain text only, optimized for Text-to-Speech readers.
-4. **DIRECTNESS**: Answer the user immediately. Do not fluff.
+CORE BEHAVIORS:
+1. **PROFESSIONALISM**: Your responses must be grammatically perfect, well-structured, and helpful. Avoid spelling errors completely.
+2. **CLARITY**: Explain concepts clearly similar to Perplexity AI or Gemini. Use paragraphs where necessary.
+3. **TONE**: Be friendly, intelligent, and precise.
+4. **FORMATTING**: You may use standard text formatting. If the user asks for code, provide it. If they ask for a list, use a list.
+5. **CONCISENESS**: While you should be detailed, avoid unnecessary fluff. Get straight to the answer.
 `;
 
 const ACTION_PARSER_INSTRUCTION = `
@@ -69,7 +71,8 @@ export const sendMessageToGemini = async (
 ): Promise<string> => {
   try {
     const client = getClient();
-    const recentHistory = history.slice(-6).map(msg => 
+    // Include more history for better context
+    const recentHistory = history.slice(-10).map(msg => 
       `${msg.sender === Sender.USER ? 'User' : 'CRAB'}: ${msg.text}`
     ).join('\n');
 
@@ -77,10 +80,10 @@ export const sendMessageToGemini = async (
 
     let response;
 
-    // Common config for accuracy
+    // Config for natural conversation
     const genConfig = {
         systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.2, // Extremely low temperature to ensure perfect grammar and no hallucinations
+        temperature: 0.7, // Higher temperature for more natural, creative language
         topK: 40,
         topP: 0.95,
     };

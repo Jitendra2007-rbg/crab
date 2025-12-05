@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ArrowLeft, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -53,7 +54,19 @@ export default function App() {
   }, [historyStack]);
 
   const navigate = (newMode: AppMode) => {
+    // If going to same mode, don't push duplicate
     if (newMode === currentMode) return;
+    
+    // Special handling for Scanner -> Chat to avoid stack buildup of Scanner
+    if (currentMode === AppMode.SCANNER && newMode === AppMode.CHAT) {
+        setHistoryStack(prev => {
+             // Remove Scanner from stack and ensure Chat is active
+             const newStack = prev.filter(m => m !== AppMode.SCANNER);
+             return newStack.length > 0 ? newStack : [AppMode.CHAT];
+        });
+        return;
+    }
+
     setHistoryStack(prev => [...prev, newMode]);
   };
 
@@ -119,29 +132,30 @@ export default function App() {
   // 1. Auto-Start Listening (Wakeword) & Resume on Visibility
   useEffect(() => {
       // Logic: If user is logged in, we want to be listening for "Hey CRAB"
-      if (user && !isListening && !isAssistantOpen && !isSpeaking && !isDictationMode) {
+      // CHECK PERMISSION: Only start if settings.enableMic is true
+      if (user && !isListening && !isAssistantOpen && !isSpeaking && !isDictationMode && settings.enableMic) {
           startListening(true);
       }
       
       const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
-              // FORCE RESTART when app comes to foreground (e.g. back from YouTube)
-              // Slight delay to ensure browser is ready
-              setTimeout(() => {
-                  startListening(true);
-              }, 100);
+              // FORCE RESTART: The "Resurrection" logic
+              console.log("App visible - Resurrecting Microphone");
+              if (!isListening && settings.enableMic) {
+                 setTimeout(() => startListening(true), 50);
+              }
           }
       };
 
       document.addEventListener('visibilitychange', handleVisibilityChange);
-      window.addEventListener('focus', handleVisibilityChange); // Extra redundancy
+      window.addEventListener('focus', handleVisibilityChange); 
 
       return () => {
           document.removeEventListener('visibilitychange', handleVisibilityChange);
           window.removeEventListener('focus', handleVisibilityChange);
       };
 
-  }, [user, isAssistantOpen, isListening, isSpeaking, isDictationMode]); 
+  }, [user, isAssistantOpen, isListening, isSpeaking, isDictationMode, settings.enableMic]); 
 
   // 2. Main Speech Processor
   useEffect(() => {
@@ -169,7 +183,7 @@ export default function App() {
     } 
     // CASE B: Assistant OPEN -> Conversation Loop
     else {
-        // Debounce: Wait for user to pause slightly (600ms)
+        // Debounce reduced to 400ms for faster replies as requested
         if (
             lowerTranscript !== lastProcessedTranscript.current && 
             !isSpeaking && 
@@ -179,7 +193,7 @@ export default function App() {
                  if (transcript.toLowerCase().trim() === lowerTranscript && lowerTranscript.length > 0) {
                      handleAssistantConversation(lowerTranscript);
                  }
-             }, 800); // 800ms debounce
+             }, 400); // 400ms debounce (faster)
 
              return () => clearTimeout(timeoutId);
         }
@@ -197,27 +211,19 @@ export default function App() {
   const handleAssistantConversation = async (rawText: string) => {
       if (processingRef.current) return;
       
-      // SAFETY CHECK: ECHO CANCELLATION
-      // Normalize comparison (remove punctuation, lowercase)
+      // ECHO CANCELLATION
       const lastAi = lastAiResponseRef.current || '';
       const normInput = rawText.replace(/[^a-z0-9]/gi, '').toLowerCase();
       const normLast = lastAi.replace(/[^a-z0-9]/gi, '').toLowerCase();
       
-      // 1. Input contains Output (Standard Echo)
       if (normLast.length > 5 && normInput.includes(normLast)) {
-          console.log("Ignored Echo (Full match)");
           resetTranscript();
           return;
       }
-      
-      // 2. Output contains Input (Tail Echo) - ROBUST CHECK
       if (normInput.length > 8 && normLast.includes(normInput)) {
-           console.log("Ignored Echo (Tail match)");
            resetTranscript();
            return;
       }
-      
-      // 3. Exact Duplicate Check (prevents loops)
       if (rawText === lastProcessedTranscript.current) return;
 
       processingRef.current = true;
@@ -247,8 +253,7 @@ export default function App() {
 
   const executeNativeIntent = async (intent: ActionIntent): Promise<string> => {
        const handleLaunch = (callback: () => void) => {
-           // We do NOT want to start listening immediately if we are leaving the app
-           // The visibility listener will handle restart when we return.
+           // Execute launch immediately. 
            callback();
        };
 
@@ -279,7 +284,6 @@ export default function App() {
                 return `Scheduled.`;
             case 'TOGGLE_SETTING':
                 showToast(`${intent.payload.value ? 'On' : 'Off'}: ${intent.payload.setting}`);
-                // In a real app, we would bridge to native code here.
                 return `Toggling ${intent.payload.setting}.`;
             case 'SCREENSHOT':
                  showToast("Screenshot captured"); return "Captured.";
@@ -303,6 +307,47 @@ export default function App() {
           }
       } catch (e) {
           return "I'm having trouble connecting.";
+      }
+  };
+
+  // --- Image Analysis Handler (For Scanner) ---
+  const handleImageAnalysis = async (base64: string, prompt: string): Promise<string> => {
+      // 1. Add User Image Message to Chat
+      const userMsg: Message = { 
+          id: Date.now().toString(), 
+          text: "Scanned Image", 
+          sender: Sender.USER, 
+          timestamp: Date.now(), 
+          type: 'image',
+          attachment: `data:image/jpeg;base64,${base64}`
+      };
+      
+      const updatedHistory = [...messages, userMsg];
+      setMessages(updatedHistory);
+      
+      // 2. Call Gemini
+      try {
+          const response = await sendMessageToGemini(updatedHistory, prompt, base64);
+          
+          // 3. Add Bot Response
+          const botMsg: Message = { 
+              id: (Date.now()+1).toString(), 
+              text: response, 
+              sender: Sender.BOT, 
+              timestamp: Date.now() 
+          };
+          
+          setMessages(prev => [...prev, botMsg]);
+          
+          // 4. Update Session Title if new
+          const newSessionTitle = messages.length === 0 ? "Scan Analysis" : sessionTitle;
+          if (messages.length === 0) setSessionTitle(newSessionTitle);
+          
+          saveChatSession(newSessionTitle, [...updatedHistory, botMsg], currentSessionId || undefined);
+
+          return response;
+      } catch (e) {
+          return "Analysis Failed.";
       }
   };
 
@@ -391,8 +436,30 @@ export default function App() {
       setCurrentSessionId(session.id);
       navigate(AppMode.CHAT); 
   };
+  
+  // FIXED: Renaming works for unsaved chats too
+  const handleRenameSession = () => {
+      const newTitle = prompt("Enter new chat name:", sessionTitle);
+      if (newTitle && newTitle.trim().length > 0) {
+          setSessionTitle(newTitle); // Immediate UI update
+          
+          if (messages.length > 0) {
+              // Save to DB
+              saveChatSession(newTitle, messages, currentSessionId || undefined)
+                .then(id => {
+                    // Update ID if it was a new session
+                    if(!currentSessionId) setCurrentSessionId(id);
+                });
+          }
+      }
+  };
 
   const toggleDictation = () => {
+      if (!settings.enableMic) {
+          showToast("Microphone is disabled in Settings.");
+          return;
+      }
+
       if (isDictationMode) {
           setIsDictationMode(false);
           resetTranscript();
@@ -403,43 +470,62 @@ export default function App() {
       }
   };
 
-  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-dark-bg font-bold text-gray-800 dark:text-white">Loading CRAB...</div>;
+  // Get Font Family based on Settings
+  const getFontFamily = () => {
+      switch(settings.font) {
+          case 'Roboto Mono': return '"Roboto Mono", monospace';
+          case 'Merriweather': return '"Merriweather", serif';
+          case 'Quicksand': return '"Quicksand", sans-serif';
+          case 'Orbitron': return '"Orbitron", sans-serif'; // Added Orbitron
+          case 'Inter':
+          default: return '"Inter", sans-serif';
+      }
+  };
+
+  if (loading) return <div className="h-screen w-screen flex items-center justify-center bg-white dark:bg-black font-bold text-gray-800 dark:text-white">Loading...</div>;
   if (!user) return <LoginPage />;
 
   let headerTitle = settings.agentName;
   if (currentMode === AppMode.CHAT) headerTitle = sessionTitle;
   else if (currentMode === AppMode.GYM) headerTitle = "Gym Mode";
+  else if (currentMode === AppMode.SCANNER) headerTitle = "Vision Mode";
   else if (currentMode !== AppMode.HISTORY_VIEW) headerTitle = currentMode.replace('SETTINGS_', '').replace('_', ' ');
 
   return (
-    <div className="flex flex-col h-full relative bg-white dark:bg-dark-bg transition-colors duration-300">
+    // APP-WIDE FONT APPLICATION
+    <div 
+        className="flex flex-col h-full relative bg-white dark:bg-black transition-colors duration-300"
+        style={{ fontFamily: getFontFamily() }}
+    >
       
       {/* Header */}
-      <header className="flex items-center justify-between p-4 px-6 bg-white/80 dark:bg-dark-surface/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-30">
-        {historyStack.length === 1 ? (
-            <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-700 dark:text-gray-200">
-                <Menu className="w-6 h-6" />
-            </button>
-        ) : (
-            <button onClick={goBack} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-700 dark:text-gray-200">
-                <ArrowLeft className="w-6 h-6" />
-            </button>
-        )}
-        <h1 className="font-bold text-sm tracking-widest text-gray-900 dark:text-white uppercase absolute left-1/2 transform -translate-x-1/2 w-48 text-center truncate">
-            {headerTitle}
-        </h1>
-        <div className="flex items-center">
-             {gymSession.isActive && currentMode !== AppMode.GYM && <div className="mr-3 animate-pulse text-red-500"><Activity size={20} /></div>}
-             {currentMode === AppMode.CHAT && (
-                 <ChatOptions 
-                    onEdit={() => {}}
-                    onDelete={() => { setMessages([]); setCurrentSessionId(null); setSessionTitle("New Chat"); }}
-                    onExport={() => generateChatPDF(sessionTitle, messages)}
-                 />
-             )}
-             {currentMode !== AppMode.CHAT && <div className="w-8"></div>}
-        </div>
-      </header>
+      {currentMode !== AppMode.SCANNER && (
+          <header className="flex items-center justify-between p-4 px-6 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-30">
+            {historyStack.length === 1 ? (
+                <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-700 dark:text-gray-200">
+                    <Menu className="w-6 h-6" />
+                </button>
+            ) : (
+                <button onClick={goBack} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-700 dark:text-gray-200">
+                    <ArrowLeft className="w-6 h-6" />
+                </button>
+            )}
+            <h1 className="font-bold text-sm tracking-widest text-gray-900 dark:text-white uppercase absolute left-1/2 transform -translate-x-1/2 w-48 text-center truncate">
+                {headerTitle}
+            </h1>
+            <div className="flex items-center">
+                {gymSession.isActive && currentMode !== AppMode.GYM && <div className="mr-3 animate-pulse text-red-500"><Activity size={20} /></div>}
+                {currentMode === AppMode.CHAT && (
+                    <ChatOptions 
+                        onEdit={handleRenameSession}
+                        onDelete={() => { setMessages([]); setCurrentSessionId(null); setSessionTitle("New Chat"); }}
+                        onExport={() => generateChatPDF(sessionTitle, messages)}
+                    />
+                )}
+                {currentMode !== AppMode.CHAT && <div className="w-8"></div>}
+            </div>
+          </header>
+      )}
       
       {dataError && (
           <div className="bg-orange-500 text-white text-[10px] p-2 text-center font-medium flex items-center justify-center space-x-2 animate-fade-in">
@@ -460,6 +546,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
             messages={messages}
             onSendMessage={handleTextCommand}
+            onImageAnalysis={handleImageAnalysis} // Passed Handler
             sessionTitle={sessionTitle}
             
             reminders={reminders}

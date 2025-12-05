@@ -1,17 +1,17 @@
 
 import React, { useRef, useEffect, useState } from 'react';
 import { Send, Sparkles, Paperclip, Mic, StopCircle, ArrowUpRight, TrendingUp, TrendingDown, Newspaper, ExternalLink, Sun, Wind, Droplets, Globe } from 'lucide-react';
-import { Message, Sender, Suggestion } from '../types';
+import { Message, Sender, Suggestion, AppMode } from '../types';
 
 interface ChatPageProps {
   messages: Message[];
   onSendMessage: (text: string) => void;
   sessionTitle: string;
-  // Speech Props
   transcript: string;
   isListening: boolean;
   isDictationMode: boolean;
   toggleDictation: () => void;
+  navigate: (mode: AppMode) => void;
 }
 
 const SUGGESTIONS: Suggestion[] = [
@@ -33,7 +33,7 @@ const Typewriter = ({ text }: { text: string }) => {
       } else {
         clearInterval(interval);
       }
-    }, 10);
+    }, 5); // Faster typing
     return () => clearInterval(interval);
   }, [text]);
   return <p className="whitespace-pre-wrap leading-relaxed">{display}</p>;
@@ -41,7 +41,7 @@ const Typewriter = ({ text }: { text: string }) => {
 
 // --- Custom Cards ---
 const WeatherCard = ({ data }: { data: any }) => (
-    <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-800 rounded-xl p-4 w-full max-w-sm my-2">
+    <div className="bg-white dark:bg-dark-surface border border-gray-200 dark:border-gray-800 rounded-xl p-4 w-full max-w-sm my-2 shadow-sm">
         <div className="flex justify-between items-start">
             <div>
                 <h3 className="text-lg font-bold text-gray-900 dark:text-white">{data.location}</h3>
@@ -61,7 +61,7 @@ const WeatherCard = ({ data }: { data: any }) => (
 );
 
 const NewsCard = ({ articles }: { articles: any[] }) => (
-    <div className="w-full max-w-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 my-2">
+    <div className="w-full max-w-sm border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 my-2 shadow-sm">
         <div className="flex items-center space-x-2 mb-3 border-b border-gray-100 dark:border-gray-800 pb-2">
             <Newspaper size={16} className="text-gray-900 dark:text-white" />
             <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-widest">Live Feed</span>
@@ -83,7 +83,7 @@ const NewsCard = ({ articles }: { articles: any[] }) => (
 const StockCard = ({ data }: { data: any }) => {
     const isUp = data.change >= 0;
     return (
-        <div className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 w-full max-w-xs my-2">
+        <div className="border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 w-full max-w-xs my-2 shadow-sm">
             <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-500 dark:text-gray-400 text-xs font-bold uppercase tracking-widest font-mono">{data.symbol}</span>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-sm ${isUp ? 'bg-gray-100 dark:bg-white text-black' : 'bg-gray-100 dark:bg-white text-black'}`}>
@@ -99,9 +99,9 @@ const StockCard = ({ data }: { data: any }) => {
 };
 
 const ResearchCard = ({ results }: { results: any[] }) => (
-    <div className="w-full max-w-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 my-2">
+    <div className="w-full max-w-md border border-gray-200 dark:border-gray-800 bg-white dark:bg-dark-surface rounded-xl p-4 my-2 shadow-sm">
         <div className="flex items-center space-x-2 mb-3">
-            <Globe size={16} className="text-gray-900 dark:text-white animate-pulse" />
+            <Globe size={16} className="text-gray-900 dark:text-white" />
             <span className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-widest">Research Data</span>
         </div>
         <div className="space-y-3">
@@ -120,7 +120,7 @@ const ResearchCard = ({ results }: { results: any[] }) => (
 
 const ChatPage: React.FC<ChatPageProps> = ({ 
     messages, onSendMessage, sessionTitle,
-    transcript, isListening, isDictationMode, toggleDictation 
+    transcript, isListening, isDictationMode, toggleDictation, navigate
 }) => {
   const [inputText, setInputText] = useState('');
   const [isBotThinking, setIsBotThinking] = useState(false);
@@ -128,10 +128,8 @@ const ChatPage: React.FC<ChatPageProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined);
 
-  // --- Handling Global Dictation ---
   useEffect(() => {
     if (isDictationMode && transcript) {
-        // Overwrite or append based on preference. Here we just set it live.
         setInputText(transcript);
     }
   }, [transcript, isDictationMode]);
@@ -155,7 +153,6 @@ const ChatPage: React.FC<ChatPageProps> = ({
   }, [messages]);
 
   const handleSubmit = async () => {
-    // If we were dictating, stop it first
     if (isDictationMode) toggleDictation();
     
     if (!inputText.trim() && !selectedImage) return;
@@ -175,32 +172,28 @@ const ChatPage: React.FC<ChatPageProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#f8f9fa] dark:bg-[#0b0c15] relative transition-colors duration-300">
+    // CLEAN INTERFACE: No background patterns, no pulses
+    <div className="flex flex-col h-full bg-white dark:bg-[#09090b] relative transition-colors duration-300">
       
-      {/* Background Grid Decoration */}
-      <div className="absolute inset-0 pointer-events-none opacity-5 dark:opacity-10" 
-           style={{ backgroundImage: 'radial-gradient(circle at 1px 1px, gray 1px, transparent 0)', backgroundSize: '40px 40px' }}>
-      </div>
-
       <div className="flex-1 overflow-y-auto p-4 pb-32 no-scrollbar z-10">
         {messages.length === 0 ? (
-            <div className="h-full flex flex-col items-center justify-center space-y-8 animate-fade-in px-4">
-                <div className="relative">
-                    <div className="absolute inset-0 bg-blue-500 blur-2xl opacity-20 rounded-full animate-pulse-slow"></div>
-                    <div className="w-24 h-24 bg-white dark:bg-[#1a1c2e] rounded-3xl flex items-center justify-center shadow-2xl relative border border-gray-100 dark:border-gray-800">
-                        <Sparkles className="w-10 h-10 text-black dark:text-white" strokeWidth={1.5} />
-                    </div>
+            <div className="h-full flex flex-col items-center justify-center space-y-8 px-4">
+                {/* Static Logo Icon */}
+                <div className="w-20 h-20 bg-white dark:bg-[#18181b] rounded-3xl flex items-center justify-center shadow-lg border border-gray-100 dark:border-gray-800">
+                    <Sparkles className="w-8 h-8 text-black dark:text-white" strokeWidth={1.5} />
                 </div>
                 
-                <h2 className="text-3xl font-light text-gray-800 dark:text-white tracking-tight">
-                    System <span className="font-bold">Online</span>
+                {/* Simple Text */}
+                <h2 className="text-2xl font-medium text-gray-900 dark:text-white tracking-tight">
+                    System Online
                 </h2>
                 
+                {/* Suggestions Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
                     {SUGGESTIONS.map((s) => (
                         <div 
                             key={s.id} 
-                            className="group relative flex items-center bg-white dark:bg-[#151725] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-500 dark:hover:border-blue-500 transition-all overflow-hidden cursor-pointer"
+                            className="group relative flex items-center bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-500 dark:hover:border-blue-500 transition-colors cursor-pointer shadow-sm"
                         >
                             <button
                                 onClick={() => onSendMessage(s.prompt)}
@@ -219,7 +212,6 @@ const ChatPage: React.FC<ChatPageProps> = ({
                             >
                                 <ArrowUpRight size={16} />
                             </button>
-                            <div className="absolute inset-0 bg-blue-50 dark:bg-blue-900/10 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
                         </div>
                     ))}
                 </div>
@@ -229,12 +221,11 @@ const ChatPage: React.FC<ChatPageProps> = ({
                 {messages.map((msg, index) => {
                     const isLastMessage = index === messages.length - 1;
                     const isUser = msg.sender === Sender.USER;
-                    
                     return (
-                        <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} animate-slide-up group`}>
+                        <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} group`}>
                             {isUser ? (
                                 <div className="max-w-[85%] relative">
-                                    <div className="bg-gradient-to-br from-gray-900 to-gray-700 dark:from-white dark:to-gray-200 text-white dark:text-black rounded-2xl rounded-tr-sm px-6 py-4 shadow-xl">
+                                    <div className="bg-black dark:bg-white text-white dark:text-black rounded-2xl rounded-tr-sm px-6 py-4 shadow-md">
                                         {msg.attachment && msg.type === 'image' && (
                                             <img src={msg.attachment} alt="Upload" className="mb-3 rounded-lg max-h-60 w-full object-cover border border-white/20" />
                                         )}
@@ -252,7 +243,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                                         {msg.type === 'stock' && msg.metadata && <StockCard data={msg.metadata} />}
                                         {msg.type === 'research' && msg.metadata && <ResearchCard results={msg.metadata} />}
                                         
-                                        <div className="text-gray-800 dark:text-gray-100 text-[15px]">
+                                        <div className="text-gray-900 dark:text-gray-100 text-[15px]">
                                             {isLastMessage ? <Typewriter text={msg.text} /> : <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>}
                                         </div>
                                     </div>
@@ -263,10 +254,10 @@ const ChatPage: React.FC<ChatPageProps> = ({
                 })}
                 
                 {isBotThinking && (
-                    <div className="flex justify-start animate-fade-in pl-1">
+                    <div className="flex justify-start pl-1">
                          <div className="flex items-center space-x-3">
                              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                             <span className="text-xs font-mono text-gray-400 uppercase tracking-widest animate-pulse">Processing Data...</span>
+                             <span className="text-xs font-mono text-gray-400 uppercase tracking-widest">Thinking...</span>
                          </div>
                     </div>
                 )}
@@ -275,9 +266,9 @@ const ChatPage: React.FC<ChatPageProps> = ({
         )}
       </div>
 
-      {/* COMMAND DECK INPUT */}
+      {/* INPUT BAR */}
       <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-50">
-          <div className={`w-full max-w-2xl bg-white/80 dark:bg-[#1a1c2e]/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-3xl shadow-2xl p-2 transition-all duration-300 ${isDictationMode ? 'ring-2 ring-red-500 shadow-red-500/20' : 'hover:shadow-blue-500/10 hover:border-blue-500/30'}`}>
+          <div className={`w-full max-w-2xl bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-3xl shadow-xl p-2 transition-all duration-300 ${isDictationMode ? 'ring-2 ring-red-500 shadow-red-500/20' : 'hover:shadow-blue-500/10'}`}>
               
               {selectedImage && (
                   <div className="px-4 pt-2 pb-1 flex justify-between items-center animate-slide-up">
@@ -294,21 +285,21 @@ const ChatPage: React.FC<ChatPageProps> = ({
                            <Paperclip size={20} />
                        </button>
                        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileUpload} />
-                       
+
                        <input
                            type="text"
                            value={inputText}
                            onChange={(e) => setInputText(e.target.value)}
                            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
                            placeholder={isDictationMode ? "Listening..." : "Type a command..."}
-                           className="flex-1 bg-transparent py-4 px-2 outline-none text-gray-800 dark:text-gray-100 placeholder-gray-400 text-base"
+                           className="flex-1 bg-transparent py-4 px-2 outline-none text-gray-900 dark:text-white placeholder-gray-400 text-base"
                        />
                   </div>
 
                   <div className="flex items-center space-x-1 pr-1 pb-1">
                        <button 
                            onClick={toggleDictation}
-                           className={`p-3 rounded-2xl transition-all duration-300 ${isDictationMode ? 'bg-red-500 text-white shadow-lg shadow-red-500/40 animate-pulse' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400'}`}
+                           className={`p-3 rounded-2xl transition-all duration-300 ${isDictationMode ? 'bg-red-50 text-red-500' : 'hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400'}`}
                        >
                            {isDictationMode ? <StopCircle size={20} /> : <Mic size={20} />}
                        </button>
@@ -316,7 +307,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                        <button 
                            onClick={handleSubmit}
                            disabled={!inputText.trim() && !selectedImage}
-                           className={`p-3 rounded-2xl transition-all duration-300 ${(!inputText.trim() && !selectedImage) ? 'bg-gray-200 dark:bg-gray-800 text-gray-400 cursor-not-allowed' : 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95'}`}
+                           className={`p-3 rounded-2xl transition-all duration-300 ${(!inputText.trim() && !selectedImage) ? 'bg-gray-100 dark:bg-gray-800 text-gray-400' : 'bg-black dark:bg-white text-white dark:text-black shadow-lg hover:scale-105 active:scale-95'}`}
                        >
                            <Send size={20} />
                        </button>
