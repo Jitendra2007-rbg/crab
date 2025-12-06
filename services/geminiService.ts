@@ -1,11 +1,20 @@
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
-// User provided API Key
-const API_KEY = 'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g';
+// Pool of API Keys for load balancing and redundancy
+const API_KEYS = [
+  'AIzaSyCRFbLdi34z2uu_UfEICfwVAGA1n_ArUrU',
+  'AIzaSyDN2TSZVLkkerNGKyRC2wn7gvbb_IGobzI',
+  'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g'
+];
 
-const getClient = () => {
-  return new GoogleGenAI({ apiKey: API_KEY });
+/**
+ * Returns a client instance. 
+ * Uses simple random selection shifted by retry count to rotate through keys on error.
+ */
+const getClient = (retryOffset = 0) => {
+  const idx = (Math.floor(Math.random() * API_KEYS.length) + retryOffset) % API_KEYS.length;
+  return new GoogleGenAI({ apiKey: API_KEYS[idx] });
 };
 
 // STRICTER INSTRUCTION for Quality
@@ -46,28 +55,45 @@ Schema:
 }
 `;
 
+// Helper to retry operations across multiple keys
+async function withKeyRotation<T>(operation: (client: GoogleGenAI) => Promise<T>): Promise<T> {
+    let lastError: any;
+    for (let i = 0; i < API_KEYS.length; i++) {
+        try {
+            const client = getClient(i);
+            return await operation(client);
+        } catch (err: any) {
+            console.warn(`Key attempt ${i + 1} failed:`, err.message || err);
+            lastError = err;
+            // Continue to next key on any error to maximize reliability
+        }
+    }
+    throw lastError;
+}
+
 export const extractActionFromText = async (
     history: Message[], 
     lastUserText: string
 ): Promise<AIActionResponse | null> => {
     try {
-        const client = getClient();
-        const context = history.slice(-2).map(m => `${m.sender}: ${m.text}`).join('\n');
-        const prompt = `Context:\n${context}\nInput: "${lastUserText}"\nJSON:`;
+        return await withKeyRotation(async (client) => {
+            const context = history.slice(-2).map(m => `${m.sender}: ${m.text}`).join('\n');
+            const prompt = `Context:\n${context}\nInput: "${lastUserText}"\nJSON:`;
 
-        const response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: ACTION_PARSER_INSTRUCTION,
-                responseMimeType: 'application/json',
-                temperature: 0.1 
-            }
+            const response = await client.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    systemInstruction: ACTION_PARSER_INSTRUCTION,
+                    responseMimeType: 'application/json',
+                    temperature: 0.1 
+                }
+            });
+
+            const jsonStr = response.text;
+            if (!jsonStr) return null;
+            return JSON.parse(jsonStr) as AIActionResponse;
         });
-
-        const jsonStr = response.text;
-        if (!jsonStr) return null;
-        return JSON.parse(jsonStr) as AIActionResponse;
     } catch (e) {
         console.error("Action Parsing Error:", e);
         return null;
@@ -81,54 +107,52 @@ export const sendMessageToGemini = async (
   isResearchMode: boolean = false
 ): Promise<{ text: string, groundingMetadata?: any }> => {
   try {
-    const client = getClient();
-    
-    // Only send last 10 messages to keep context relevant and reduce latency
-    const recentHistory = history.slice(-10).map(msg => 
-      `${msg.sender === Sender.USER ? 'User' : 'CRAB'}: ${msg.text}`
-    ).join('\n');
+    return await withKeyRotation(async (client) => {
+        // Only send last 10 messages to keep context relevant and reduce latency
+        const recentHistory = history.slice(-10).map(msg => 
+          `${msg.sender === Sender.USER ? 'User' : 'CRAB'}: ${msg.text}`
+        ).join('\n');
 
-    const prompt = `${recentHistory}\nUser: ${newMessage}\nCRAB:`;
+        const prompt = `${recentHistory}\nUser: ${newMessage}\nCRAB:`;
 
-    let response;
+        let response;
 
-    // Config for natural but accurate conversation
-    const genConfig: any = {
-        systemInstruction: isResearchMode ? SYSTEM_INSTRUCTION + "\n" + RESEARCH_INSTRUCTION : SYSTEM_INSTRUCTION,
-        temperature: 0.4, // Lower temperature for more accurate/proper responses
-        topK: 40,
-        topP: 0.95,
-    };
+        // Config for natural but accurate conversation
+        const genConfig: any = {
+            systemInstruction: isResearchMode ? SYSTEM_INSTRUCTION + "\n" + RESEARCH_INSTRUCTION : SYSTEM_INSTRUCTION,
+            temperature: 0.4, 
+            topK: 40,
+            topP: 0.95,
+        };
 
-    // Add Research Tool if enabled
-    if (isResearchMode) {
-        genConfig.tools = [{ googleSearch: {} }];
-    }
+        if (isResearchMode) {
+            genConfig.tools = [{ googleSearch: {} }];
+        }
 
-    if (base64Image) {
-        response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: {
-                parts: [
-                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-                    { text: prompt }
-                ]
-            },
-            config: genConfig
-        });
-    } else {
-        response = await client.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: genConfig
-        });
-    }
+        if (base64Image) {
+            response = await client.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: {
+                    parts: [
+                        { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                        { text: prompt }
+                    ]
+                },
+                config: genConfig
+            });
+        } else {
+            response = await client.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: genConfig
+            });
+        }
 
-    // Return text and grounding chunks if available (URLs)
-    return {
-        text: response.text || "I didn't catch that.",
-        groundingMetadata: response.candidates?.[0]?.groundingMetadata?.groundingChunks
-    };
+        return {
+            text: response.text || "I didn't catch that.",
+            groundingMetadata: response.candidates?.[0]?.groundingMetadata?.groundingChunks
+        };
+    });
 
   } catch (error) {
     console.error("Gemini Error:", error);
