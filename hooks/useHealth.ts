@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef } from 'react';
 import { supabase } from '../services/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -12,6 +11,9 @@ export const useHealth = () => {
     const [todayStats, setTodayStats] = useState<HealthStats>({
         steps: 0, distance: 0, calories: 0, goal: 10000
     });
+    
+    // New: Loading state to prevent resetting to 0 before load
+    const [isStatsLoaded, setIsStatsLoaded] = useState(false);
 
     const [gymSession, setGymSession] = useState<WorkoutSession>({
         isActive: false, startTime: null, currentSteps: 0, currentDistance: 0, currentCalories: 0, activeExercise: null, logs: []
@@ -31,13 +33,13 @@ export const useHealth = () => {
     useEffect(() => {
         if (!user) {
             setTodayStats({ steps: 0, distance: 0, calories: 0, goal: 10000 });
+            setIsStatsLoaded(true);
             return;
         }
         
         const loadStats = async () => {
             try {
                 const today = getTodayDate();
-                // Explicitly select columns to ensure we get 'goal'
                 const { data, error } = await supabase
                     .from('health_stats')
                     .select('*')
@@ -53,7 +55,7 @@ export const useHealth = () => {
                         goal: data.goal || 10000 
                     });
                 } else {
-                    // Create entry for today if it doesn't exist
+                    // Initialize for today
                     const { error: insertError } = await supabase.from('health_stats').insert({ 
                         user_id: user.id, 
                         date: today, 
@@ -62,26 +64,30 @@ export const useHealth = () => {
                         calories: 0,
                         goal: 10000
                     });
-                    if (!insertError) {
-                        setTodayStats({ steps: 0, distance: 0, calories: 0, goal: 10000 });
-                    }
                 }
             } catch (e) {
                 console.error("Health Load Error", e);
+            } finally {
+                // Mark as loaded regardless of success to allow pedometer to start
+                setIsStatsLoaded(true);
             }
         };
 
         loadStats();
-        initStepCounter();
 
         return () => {
             if (motionListener.current) window.removeEventListener('devicemotion', motionListener.current);
         };
     }, [user]);
 
+    // Initialize Pedometer ONLY after stats are loaded
+    useEffect(() => {
+        if (isStatsLoaded && !isPedometerActive.current) {
+            initStepCounter();
+        }
+    }, [isStatsLoaded]);
+
     const initStepCounter = async () => {
-         if (isPedometerActive.current) return;
-         
          // 1. Try Capacitor Pedometer (Native)
          if (Pedometer) {
              try {
@@ -138,13 +144,7 @@ export const useHealth = () => {
         setTodayStats(prev => {
             const newSteps = prev.steps + count;
             const metrics = calculateMetrics(newSteps);
-            pendingSaveRef.current = true; // Mark as needing save
-            
-            // Check Goal Notification
-            if (newSteps === prev.goal) {
-                 alert(`🎉 Goal Reached! You hit ${prev.goal} steps.`);
-            }
-            
+            pendingSaveRef.current = true;
             return { ...prev, steps: newSteps, ...metrics };
         });
 
@@ -175,12 +175,13 @@ export const useHealth = () => {
         }
     };
 
-    // Auto-Save Interval (Every 10 seconds if changes detected)
+    // Auto-Save Interval
     useEffect(() => {
         if (!user) return;
         const saveInterval = setInterval(async () => {
              if (pendingSaveRef.current) {
                  pendingSaveRef.current = false;
+                 // Use exact date to match what we loaded
                  await supabase.from('health_stats').upsert({
                      user_id: user.id, 
                      date: getTodayDate(), 
@@ -190,7 +191,7 @@ export const useHealth = () => {
                      goal: todayStats.goal
                  }, { onConflict: 'user_id, date' });
              }
-        }, 10000);
+        }, 10000); // Save every 10s if changed
         return () => clearInterval(saveInterval);
     }, [todayStats, user]);
 
@@ -218,5 +219,5 @@ export const useHealth = () => {
         return summary;
     };
 
-    return { todayStats, gymSession, startGym, stopGym, startExercise, logSet, endExercise, requestMotionPermission, updateGoal };
+    return { todayStats, isStatsLoaded, gymSession, startGym, stopGym, startExercise, logSet, endExercise, requestMotionPermission, updateGoal };
 };

@@ -1,4 +1,3 @@
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 
 // --- Voice Presets Configuration ---
@@ -29,20 +28,37 @@ export const useSpeech = () => {
   const ignoreInputRef = useRef(false); // True if we are in "Cool-down" mode
   const restartTimerRef = useRef<any>(null);
 
+  // 1. Robust Voice Loading for Mobile
   useEffect(() => {
     if (typeof window === 'undefined' || !window.speechSynthesis) return;
 
     const loadVoices = () => {
-        try {
-            const voices = window.speechSynthesis.getVoices();
-            if (voices.length > 0) setAvailableVoices(voices);
-        } catch (e) {}
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+            setAvailableVoices(voices);
+        }
     };
-    loadVoices();
-    try { window.speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {}
-    return () => { try { window.speechSynthesis.onvoiceschanged = null; } catch(e) {} };
-  }, []);
 
+    loadVoices();
+    
+    // Chrome/Android loads asynchronously
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    // Backup interval for stubborn mobile browsers
+    const interval = setInterval(() => {
+        if (availableVoices.length === 0) loadVoices();
+        else clearInterval(interval);
+    }, 500);
+
+    return () => {
+        clearInterval(interval);
+        try { window.speechSynthesis.onvoiceschanged = null; } catch(e) {}
+    };
+  }, [availableVoices.length]);
+
+  // 2. Setup Recognition
   const setupRecognition = useCallback(() => {
     if (typeof window === 'undefined' || !('webkitSpeechRecognition' in window)) return;
 
@@ -81,17 +97,16 @@ export const useSpeech = () => {
               shouldBeListeningRef.current = false;
               setIsListening(false);
           } else {
-              // For network errors or no-speech, we ignore and let it restart
+              // Ignore network errors, try restart
           }
         };
 
         recognition.onend = () => {
-            // Instant restart logic
             if (shouldBeListeningRef.current) {
                  clearTimeout(restartTimerRef.current);
                  restartTimerRef.current = setTimeout(() => {
                      try { recognition.start(); } catch(e) {}
-                 }, 50); // Small delay to prevent CPU hogging
+                 }, 100);
             } else {
                  setIsListening(false);
             }
@@ -121,7 +136,7 @@ export const useSpeech = () => {
   }, [setupRecognition]);
 
   const startListening = (continuous = true) => {
-    if (shouldBeListeningRef.current && isListening) return; // Prevent double start
+    if (shouldBeListeningRef.current && isListening) return;
 
     shouldBeListeningRef.current = true;
     isSpeakingRef.current = false;
@@ -155,11 +170,13 @@ export const useSpeech = () => {
         return;
     }
 
+    // Stop listening temporarily
     isSpeakingRef.current = true; 
     ignoreInputRef.current = true; 
     setIsSpeaking(true);
     setTranscript(''); 
 
+    // Cancel existing
     window.speechSynthesis.cancel();
     
     const cleanText = text.replace(/[*#]/g, '').replace(/\[.*?\]/g, ''); 
@@ -171,13 +188,16 @@ export const useSpeech = () => {
         setTimeout(() => {
             ignoreInputRef.current = false;
             if (onEnd) onEnd();
-        }, 800); // 800ms cooldown after speaking before listening again
+        }, 800);
     };
 
     utterance.onend = handleEnd;
-    utterance.onerror = handleEnd;
+    utterance.onerror = (e) => {
+        console.error("Speech Error:", e);
+        handleEnd();
+    };
     
-    // Voice Selection Logic
+    // Voice Selection Logic - RETRY if voices empty
     let voices = availableVoices;
     if (voices.length === 0) {
         try { voices = window.speechSynthesis.getVoices(); } catch(e) {}
@@ -186,13 +206,27 @@ export const useSpeech = () => {
     const presetId = voiceId && VOICE_PRESETS[voiceId] ? voiceId : 'Cosmic';
     const preset = VOICE_PRESETS[presetId];
 
+    // Priority: Exact Name match -> Lang match -> Gender match -> Default
     let selectedVoice = voices.find(v => 
-        preset.terms.some(term => v.name.toLowerCase().includes(term) || v.lang.toLowerCase().includes(term))
+        preset.terms.some(term => v.name.toLowerCase().includes(term))
     );
-    
-    if (!selectedVoice && voices.length > 0) selectedVoice = voices[0];
 
-    if (selectedVoice) utterance.voice = selectedVoice;
+    if (!selectedVoice) {
+         selectedVoice = voices.find(v => 
+            preset.terms.some(term => v.lang.toLowerCase().includes(term))
+         );
+    }
+    
+    if (!selectedVoice && voices.length > 0) {
+        // Fallback to first available
+        selectedVoice = voices[0];
+    }
+
+    if (selectedVoice) {
+        utterance.voice = selectedVoice;
+        utterance.lang = selectedVoice.lang; // Important for Android
+    }
+    
     utterance.pitch = preset.pitch;
     utterance.rate = preset.rate;
 

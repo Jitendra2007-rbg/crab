@@ -1,6 +1,5 @@
-
 import React, { useRef, useState, useEffect } from 'react';
-import { X, RefreshCw, Type, Calculator, Leaf, Scan, Grid, CheckCircle, ArrowRight, Camera } from 'lucide-react';
+import { X, RefreshCw, Type, Calculator, Leaf, Scan, Grid, CheckCircle, ArrowRight, Camera, Zap } from 'lucide-react';
 
 interface ScannerPageProps {
   onAnalyze: (image: string, prompt: string) => Promise<string>;
@@ -9,37 +8,32 @@ interface ScannerPageProps {
 
 type ScanMode = 'OBJECT' | 'BIO' | 'TEXT' | 'MATH';
 
+// Enhanced prompts for better detail as requested
 const MODES: { id: ScanMode; label: string; icon: React.ReactNode; prompt: string }[] = [
     { 
         id: 'OBJECT', 
         label: 'Identify', 
         icon: <Scan size={20} />, 
-        prompt: "Identify the main object in this image. Provide 3 interesting facts about it and its primary function." 
+        prompt: "Look at this image. 1. Identify what exactly is in the image (the main subject). 2. Describe the surroundings and details about the context. 3. Provide 3 interesting facts about it." 
     },
     { 
         id: 'BIO', 
         label: 'Bio/Food', 
         icon: <Leaf size={20} />, 
-        prompt: "Analyze this image. If it is food, provide nutritional estimation (calories, macros) and healthiness. If it is a plant/animal, identify the species." 
+        prompt: "Analyze this image. If it is food, provide nutritional estimation (calories, macros) and healthiness. If it is a plant/animal, identify the species, habitat, and care details." 
     },
     { 
         id: 'TEXT', 
         label: 'Read', 
         icon: <Type size={20} />, 
-        prompt: "Transcribe all text in this image accurately. If the text is not English, provide a translation." 
+        prompt: "Transcribe all text in this image accurately, maintaining the structure. If the text is not English, provide a translation." 
     },
     { 
         id: 'MATH', 
         label: 'Solve', 
         icon: <Calculator size={20} />, 
-        prompt: "Solve the math problem or logic puzzle presented in this image. Show step-by-step reasoning." 
+        prompt: "Solve the math problem or logic puzzle presented in this image. Show step-by-step reasoning and the final solution." 
     }
-];
-
-const MOCK_KEYWORDS = [
-    "Detecting edges...", "Calibrating ISO...", "Analyzing patterns...", 
-    "Identifying subject...", "Checking lighting...", "Scanning textures...", 
-    "Processing geometry...", "Neural net active..."
 ];
 
 const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
@@ -53,15 +47,19 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
   const [error, setError] = useState<string | null>(null);
   const [keyword, setKeyword] = useState("Initializing...");
   const [showGrid, setShowGrid] = useState(true);
+  const [autoScan, setAutoScan] = useState(false);
 
-  // Keyword Ticker Effect
+  // Auto-Scan Timer
   useEffect(() => {
-    if (capturedImage) return; 
-    const interval = setInterval(() => {
-        setKeyword(MOCK_KEYWORDS[Math.floor(Math.random() * MOCK_KEYWORDS.length)]);
-    }, 1200);
-    return () => clearInterval(interval);
-  }, [capturedImage]);
+    let timer: ReturnType<typeof setTimeout>;
+    if (autoScan && !capturedImage && !isAnalyzing && !result) {
+        setKeyword("Auto-scan enabled. Hold steady...");
+        timer = setTimeout(() => {
+            handleCapture();
+        }, 5000); // 5 Seconds "long time" before auto capture
+    }
+    return () => clearTimeout(timer);
+  }, [autoScan, capturedImage, isAnalyzing, result]);
 
   // Start Camera Logic
   useEffect(() => {
@@ -82,7 +80,6 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
              });
           } catch (firstErr) {
              console.warn("Environment camera failed, trying default.", firstErr);
-             // 2. Fallback to any camera
              s = await navigator.mediaDevices.getUserMedia({ video: true });
           }
 
@@ -90,7 +87,6 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
               setStream(s);
               if (videoRef.current) {
                   videoRef.current.srcObject = s;
-                  // Explicitly play to avoid 'not opening' issues
                   videoRef.current.play().catch(e => console.error("Play error:", e));
               }
           } else {
@@ -141,7 +137,7 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
       
       setCapturedImage(`data:image/jpeg;base64,${base64}`);
       setIsAnalyzing(true);
-      setKeyword("Processing image data...");
+      setKeyword("Analyzing details...");
       
       try {
           const modeConfig = MODES.find(m => m.id === activeMode);
@@ -151,6 +147,7 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
           setResult("Analysis failed. Please try again.");
       } finally {
           setIsAnalyzing(false);
+          setAutoScan(false); // Disable auto-scan after capture
       }
   };
 
@@ -165,13 +162,9 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
 
   return (
     <div className="fixed inset-0 z-[100] flex flex-col font-mono bg-white dark:bg-black transition-colors duration-300">
-        {/* Flash Overlay */}
         <div id="camera-flash" className="absolute inset-0 bg-white opacity-0 pointer-events-none transition-opacity duration-100 z-[110]"></div>
-
-        {/* Hidden Canvas */}
         <canvas ref={canvasRef} className="hidden" />
 
-        {/* --- Viewport (The Camera Feed) --- */}
         <div className="relative flex-1 overflow-hidden bg-black">
             {capturedImage ? (
                 <img src={capturedImage} alt="Captured" className="w-full h-full object-cover" />
@@ -185,10 +178,8 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                 />
             )}
 
-            {/* --- Professional HUD Layer (Overlay) --- */}
             {!capturedImage && !error && (
                 <div className="absolute inset-0 pointer-events-none p-6">
-                    {/* Grid Overlay */}
                     {showGrid && (
                         <div className="absolute inset-0 grid grid-cols-3 grid-rows-3 opacity-20 pointer-events-none">
                              <div className="border-r border-b border-white"></div>
@@ -202,24 +193,17 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                              <div></div>
                         </div>
                     )}
-
-                    {/* Corners */}
-                    <div className="absolute top-6 left-6 w-8 h-8 border-t-2 border-l-2 border-white/80"></div>
-                    <div className="absolute top-6 right-6 w-8 h-8 border-t-2 border-r-2 border-white/80"></div>
-                    <div className="absolute bottom-6 left-6 w-8 h-8 border-b-2 border-l-2 border-white/80"></div>
-                    <div className="absolute bottom-6 right-6 w-8 h-8 border-b-2 border-r-2 border-white/80"></div>
                     
                     {/* Simulated Analysis Ticker */}
                     <div className="absolute bottom-10 left-6">
-                         <div className="flex items-center space-x-2 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md border-l-2 border-blue-500">
-                             <div className="w-2 h-2 bg-blue-500 rounded-full animate-ping"></div>
-                             <span className="text-xs font-bold text-blue-200 tracking-wider uppercase">{keyword}</span>
+                         <div className={`flex items-center space-x-2 bg-black/60 px-3 py-1.5 rounded-md backdrop-blur-md border-l-2 ${autoScan ? 'border-green-500' : 'border-blue-500'}`}>
+                             <div className={`w-2 h-2 rounded-full animate-ping ${autoScan ? 'bg-green-500' : 'bg-blue-500'}`}></div>
+                             <span className="text-xs font-bold text-white tracking-wider uppercase">{keyword}</span>
                          </div>
                     </div>
                 </div>
             )}
             
-            {/* Error Message */}
             {error && (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
                     <Camera size={48} className="text-gray-500 mb-4" />
@@ -228,7 +212,6 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                 </div>
             )}
 
-            {/* Results Overlay */}
             {(isAnalyzing || result) && (
                 <div className="absolute inset-0 bg-black/80 backdrop-blur-md flex flex-col items-center justify-center p-6 animate-fade-in z-30">
                      {isAnalyzing ? (
@@ -241,17 +224,17 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                              <p className="text-blue-400 text-sm animate-pulse">{keyword}</p>
                          </div>
                      ) : (
-                         <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-2xl animate-slide-up">
-                             <div className="flex items-center space-x-3 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4">
+                         <div className="w-full max-w-md bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-2xl p-6 shadow-2xl animate-slide-up max-h-[80vh] flex flex-col">
+                             <div className="flex items-center space-x-3 mb-4 border-b border-gray-100 dark:border-gray-800 pb-4 shrink-0">
                                  <CheckCircle className="text-green-500" />
                                  <h3 className="text-lg font-bold text-gray-900 dark:text-white">Analysis Complete</h3>
                              </div>
                              
-                             <div className="bg-gray-50 dark:bg-black/50 rounded-lg p-4 mb-6 max-h-48 overflow-y-auto text-sm text-gray-800 dark:text-gray-300 leading-relaxed border border-gray-100 dark:border-gray-800">
+                             <div className="bg-gray-50 dark:bg-black/50 rounded-lg p-4 mb-6 overflow-y-auto text-sm text-gray-800 dark:text-gray-300 leading-relaxed border border-gray-100 dark:border-gray-800 flex-1">
                                  {result}
                              </div>
 
-                             <div className="flex space-x-3">
+                             <div className="flex space-x-3 shrink-0">
                                  <button 
                                      onClick={handleReset} 
                                      className="flex-1 py-3 bg-gray-100 dark:bg-gray-800 hover:bg-gray-200 dark:hover:bg-gray-700 text-gray-900 dark:text-white rounded-xl font-bold transition-colors flex items-center justify-center space-x-2"
@@ -263,7 +246,7 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                                      onClick={handleClose} 
                                      className="flex-[2] py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center space-x-2"
                                  >
-                                     <span>Import</span>
+                                     <span>Done</span>
                                      <ArrowRight size={18} />
                                  </button>
                              </div>
@@ -272,32 +255,27 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                 </div>
             )}
 
-            {/* Header Controls (Absolute over video) */}
             <div className="absolute top-0 left-0 right-0 p-4 pt- safe-top flex justify-between items-center z-20">
-                <button 
-                    onClick={handleClose} 
-                    className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white/20 transition-colors border border-white/10"
-                >
+                <button onClick={handleClose} className="p-3 bg-black/40 backdrop-blur-md rounded-full text-white hover:bg-white/20 transition-colors border border-white/10">
                     <X size={24} />
                 </button>
-                <div className="px-4 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-blue-500/30">
-                    <span className="text-xs font-bold text-blue-400 uppercase tracking-widest shadow-[0_0_10px_rgba(59,130,246,0.5)]">
-                        CRAB VISION
-                    </span>
-                </div>
                 <button 
-                    onClick={() => setShowGrid(!showGrid)} 
-                    className={`p-3 backdrop-blur-md rounded-full transition-colors border border-white/10 ${showGrid ? 'bg-white text-black' : 'bg-black/40 text-white'}`}
+                    onClick={() => setAutoScan(!autoScan)}
+                    className={`px-4 py-1.5 backdrop-blur-md rounded-full border transition-all flex items-center space-x-2 ${autoScan ? 'bg-green-500/80 border-green-400' : 'bg-black/60 border-blue-500/30'}`}
                 >
+                    <Zap size={14} className={autoScan ? 'fill-white text-white' : 'text-blue-400'} />
+                    <span className={`text-xs font-bold uppercase tracking-widest ${autoScan ? 'text-white' : 'text-blue-400'}`}>
+                        {autoScan ? 'Auto-Scan On' : 'Auto-Scan Off'}
+                    </span>
+                </button>
+                <button onClick={() => setShowGrid(!showGrid)} className={`p-3 backdrop-blur-md rounded-full transition-colors border border-white/10 ${showGrid ? 'bg-white text-black' : 'bg-black/40 text-white'}`}>
                     <Grid size={20} />
                 </button>
             </div>
         </div>
 
-        {/* --- Controls Footer (Themed) --- */}
         {!result && !isAnalyzing && (
             <div className="bg-white dark:bg-black pb-8 pt-4 px-6 border-t border-gray-100 dark:border-gray-800 transition-colors">
-                {/* Mode Selector */}
                 <div className="flex justify-center items-center mb-8 space-x-6 overflow-x-auto no-scrollbar">
                     {MODES.map(mode => (
                         <button
@@ -317,7 +295,6 @@ const ScannerPage: React.FC<ScannerPageProps> = ({ onAnalyze, onClose }) => {
                     ))}
                 </div>
 
-                {/* Capture Trigger */}
                 <div className="flex justify-center items-center">
                     <button 
                         onClick={handleCapture}

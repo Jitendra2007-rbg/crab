@@ -2,7 +2,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
 // User provided API Keys for redundancy and load balancing.
-// Hardcoded to ensure browser compatibility (no process.env).
 const API_KEYS = [
   'AIzaSyCRFbLdi34z2uu_UfEICfwVAGA1n_ArUrU',
   'AIzaSyDN2TSZVLkkerNGKyRC2wn7gvbb_IGobzI',
@@ -137,8 +136,6 @@ export const sendMessageToGemini = async (
 
         const prompt = `${recentHistory}\nUser: ${newMessage}\nCRAB:`;
 
-        let response;
-
         const genConfig: any = {
             systemInstruction: isResearchMode ? SYSTEM_INSTRUCTION + "\n" + RESEARCH_INSTRUCTION : SYSTEM_INSTRUCTION,
             temperature: 0.4, 
@@ -150,6 +147,7 @@ export const sendMessageToGemini = async (
             genConfig.tools = [{ googleSearch: {} }];
         }
 
+        let response;
         if (base64Image) {
             response = await client.models.generateContent({
                 model: 'gemini-2.5-flash',
