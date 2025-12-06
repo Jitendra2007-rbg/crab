@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../services/supabase';
 import { User } from '@supabase/supabase-js';
@@ -56,10 +55,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, []);
 
   const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-    });
-    if (error) throw error;
+    try {
+        const { error } = await supabase.auth.signInWithOAuth({
+          provider: 'google',
+          options: {
+            redirectTo: window.location.origin,
+            queryParams: {
+              access_type: 'offline',
+              prompt: 'select_account', // Forces the browser to show the account picker
+            },
+          },
+        });
+        if (error) throw error;
+    } catch (err) {
+        console.error("Google Sign In Error:", err);
+        throw err;
+    }
   };
 
   const signupEmail = async (email: string, pass: string, agentName: string) => {

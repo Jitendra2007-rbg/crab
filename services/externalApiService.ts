@@ -1,5 +1,5 @@
-
 import { WeatherData, NewsArticle, StockData, SearchResult } from '../types';
+import { generateGeminiJSON } from './geminiService';
 
 // API KEYS - HARDCODED Fallbacks to prevent Browser Crash
 // In a browser environment, 'process' is not defined.
@@ -27,16 +27,19 @@ export const fetchWeather = async (city: string): Promise<WeatherData> => {
             windSpeed: data.wind.speed
         };
     } catch (e) {
-        console.warn("Using Mock Weather Data");
-        const conditions = ['Sunny', 'Cloudy', 'Rainy', 'Clear'];
-        const cond = conditions[Math.floor(Math.random() * conditions.length)];
+        console.warn("Using AI Generated Weather Data");
+        const prompt = `Generate realistic current weather data for ${city} as JSON. 
+        Format: { "location": string, "temp": number (celsius), "condition": string (e.g. Sunny, Cloudy), "humidity": number, "windSpeed": number }`;
+        
+        const aiData = await generateGeminiJSON(prompt);
+        
         return {
-            location: city || "Unknown Location",
-            temp: Math.floor(Math.random() * 15) + 20, 
-            condition: cond,
-            icon: '', 
-            humidity: 65,
-            windSpeed: 12
+            location: aiData?.location || city,
+            temp: aiData?.temp || 22,
+            condition: aiData?.condition || "Clear",
+            icon: '', // Fallback to default icon in UI
+            humidity: aiData?.humidity || 50,
+            windSpeed: aiData?.windSpeed || 10
         };
     }
 };
@@ -64,13 +67,20 @@ export const fetchNews = async (query?: string): Promise<NewsArticle[]> => {
         }));
 
     } catch (e) {
-        console.warn("Using Mock News Data");
-        const topic = query || "Global";
+        console.warn("Using AI Generated News Data");
+        const topic = query || "Global Tech & Science";
+        const prompt = `Generate 4 realistic news headlines about ${topic} as JSON array.
+        Format: [{ "title": string, "source": string, "time": string }]`;
+        
+        const aiData = await generateGeminiJSON(prompt);
+        
+        if (Array.isArray(aiData)) {
+            return aiData;
+        }
+        
         return [
-            { title: `${topic} Markets hit all-time high amidst positive global signals`, source: "Finance Daily", time: "10:30 AM" },
-            { title: `New breakthrough in ${topic} technology announced today`, source: "TechCrunch", time: "09:15 AM" },
-            { title: `Local updates: Key developments in ${topic} sector`, source: "The Times", time: "08:00 AM" },
-            { title: "Global weather patterns shifting unexpectedly", source: "Nature Journal", time: "Yesterday" }
+            { title: `${topic} sees major breakthrough today`, source: "AI News", time: "Just now" },
+            { title: `Global markets react to ${topic} developments`, source: "World Daily", time: "1 hour ago" }
         ];
     }
 };
@@ -98,36 +108,41 @@ export const fetchStock = async (symbol: string): Promise<StockData> => {
         };
 
     } catch (e) {
-        console.warn("Using Mock Stock Data");
-        const base = Math.random() * 1000 + 100;
-        const change = (Math.random() * 20) - 10;
+        console.warn("Using AI Generated Stock Data");
+        const prompt = `Generate realistic stock market data for ticker ${symbol} as JSON.
+        Format: { "symbol": string, "price": number, "change": number, "percentChange": number, "high": number, "low": number }`;
+        
+        const aiData = await generateGeminiJSON(prompt);
+        
         return {
-            symbol: symbol.toUpperCase(),
-            price: parseFloat(base.toFixed(2)),
-            change: parseFloat(change.toFixed(2)),
-            percentChange: parseFloat((change / base * 100).toFixed(2)),
-            high: parseFloat((base + 10).toFixed(2)),
-            low: parseFloat((base - 10).toFixed(2))
+            symbol: aiData?.symbol || symbol.toUpperCase(),
+            price: aiData?.price || 150.00,
+            change: aiData?.change || 1.5,
+            percentChange: aiData?.percentChange || 1.0,
+            high: aiData?.high || 155.00,
+            low: aiData?.low || 145.00
         };
     }
 };
 
 export const searchWeb = async (query: string): Promise<SearchResult[]> => {
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1000));
     
     console.log(`Searching web for: ${query}`);
     
-    const results: SearchResult[] = [];
+    // Use AI to generate realistic search results based on the query
+    const prompt = `Generate 4 realistic web search results for "${query}" as JSON array.
+    Format: [{ "title": string, "snippet": string, "url": string, "source": string }]`;
     
-    if (query.toLowerCase().includes("phone") || query.toLowerCase().includes("iphone") || query.toLowerCase().includes("samsung")) {
-        results.push({ title: "Best Smartphones 2024 - TechRadar", snippet: "The best phones right now including iPhone 15 Pro, Samsung S24 Ultra...", url: "https://techradar.com", source: "TechRadar" });
-        results.push({ title: "Smartphone Reviews & Ratings", snippet: "Comprehensive reviews of the latest mobile devices...", url: "https://gsmarena.com", source: "GSMArena" });
-    } else if (query.toLowerCase().includes("laptop") || query.toLowerCase().includes("macbook")) {
-         results.push({ title: "Best Laptops of 2024", snippet: "Our picks for the best laptops you can buy...", url: "https://theverge.com", source: "The Verge" });
-    } else {
-         results.push({ title: `${query} - Wikipedia`, snippet: `${query} is a topic of interest involving...`, url: "https://wikipedia.org", source: "Wikipedia" });
-         results.push({ title: `Latest news on ${query}`, snippet: `Recent developments regarding ${query} show significant impact...`, url: "https://cnn.com", source: "CNN" });
+    const aiData = await generateGeminiJSON(prompt);
+    
+    if (Array.isArray(aiData) && aiData.length > 0) {
+        return aiData;
     }
     
-    return results;
+    // Fallback static data if AI fails
+    return [
+         { title: `${query} - Wikipedia`, snippet: `${query} is a topic of interest involving...`, url: "https://wikipedia.org", source: "Wikipedia" },
+         { title: `Latest news on ${query}`, snippet: `Recent developments regarding ${query} show significant impact...`, url: "https://cnn.com", source: "CNN" }
+    ];
 };

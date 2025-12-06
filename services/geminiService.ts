@@ -1,4 +1,4 @@
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
 // User provided API Keys for redundancy and load balancing
@@ -35,15 +35,6 @@ Current Time: ${new Date().toLocaleString()}
 Rules:
 1. DETECT actions: SCHEDULE, REMINDER, WEATHER, NEWS, STOCK, WEB_SEARCH.
 2. OUTPUT JSON ONLY.
-
-Schema:
-{
-  "hasAction": boolean, 
-  "actionType": "SCHEDULE" | "REMINDER_BATCH" | "FETCH_WEATHER" | "FETCH_NEWS" | "FETCH_STOCK" | "FETCH_WEB_SEARCH" | "NONE",
-  "missingInfo": string | null,
-  "reply": string,
-  "data": { "title": string, "date": "YYYY-MM-DD", "startTime": "HH:MM", "endTime": "HH:MM", "reminders": [{"text":string,"time":"HH:MM","date":"YYYY-MM-DD"}], "location":string, "query":string, "symbol":string }
-}
 `;
 
 /**
@@ -76,6 +67,29 @@ async function withKeyRotation<T>(operation: (client: GoogleGenAI) => Promise<T>
     throw lastError;
 }
 
+/**
+ * Generic helper to generate JSON data using Gemini
+ * Used by external services to fallback to AI generation
+ */
+export const generateGeminiJSON = async (prompt: string, schema?: any): Promise<any> => {
+    try {
+        return await withKeyRotation(async (client) => {
+            const response = await client.models.generateContent({
+                model: 'gemini-2.5-flash',
+                contents: prompt,
+                config: {
+                    responseMimeType: 'application/json',
+                    responseSchema: schema
+                }
+            });
+            return JSON.parse(response.text || "{}");
+        });
+    } catch (e) {
+        console.error("Gemini JSON Generation Error:", e);
+        return null;
+    }
+};
+
 export const extractActionFromText = async (
     history: Message[], 
     lastUserText: string
@@ -91,7 +105,7 @@ export const extractActionFromText = async (
                 config: {
                     systemInstruction: ACTION_PARSER_INSTRUCTION,
                     responseMimeType: 'application/json',
-                    temperature: 0.1 
+                    temperature: 0.1,
                 }
             });
 
