@@ -1,21 +1,12 @@
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
-// Pool of API Keys for load balancing and redundancy
+// User provided API Keys for redundancy and load balancing
 const API_KEYS = [
   'AIzaSyCRFbLdi34z2uu_UfEICfwVAGA1n_ArUrU',
   'AIzaSyDN2TSZVLkkerNGKyRC2wn7gvbb_IGobzI',
   'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g'
 ];
-
-/**
- * Returns a client instance. 
- * Uses simple random selection shifted by retry count to rotate through keys on error.
- */
-const getClient = (retryOffset = 0) => {
-  const idx = (Math.floor(Math.random() * API_KEYS.length) + retryOffset) % API_KEYS.length;
-  return new GoogleGenAI({ apiKey: API_KEYS[idx] });
-};
 
 // STRICTER INSTRUCTION for Quality
 const SYSTEM_INSTRUCTION = `
@@ -55,19 +46,33 @@ Schema:
 }
 `;
 
-// Helper to retry operations across multiple keys
+/**
+ * Executes an operation with automatic key rotation.
+ * If a key fails (e.g. quota exceeded), it retries with the next key.
+ */
 async function withKeyRotation<T>(operation: (client: GoogleGenAI) => Promise<T>): Promise<T> {
     let lastError: any;
+    
+    // Pick a random starting index to distribute load across keys on app reload
+    const startIndex = Math.floor(Math.random() * API_KEYS.length);
+    
+    // Try every key exactly once
     for (let i = 0; i < API_KEYS.length; i++) {
+        const index = (startIndex + i) % API_KEYS.length;
+        const apiKey = API_KEYS[index];
+        
         try {
-            const client = getClient(i);
+            const client = new GoogleGenAI({ apiKey });
             return await operation(client);
         } catch (err: any) {
-            console.warn(`Key attempt ${i + 1} failed:`, err.message || err);
+            console.warn(`Gemini API Key ${index + 1}/${API_KEYS.length} failed:`, err.message || err);
             lastError = err;
-            // Continue to next key on any error to maximize reliability
+            // Continue loop to try next key
         }
     }
+    
+    // If all keys failed
+    console.error("All API keys failed to respond.");
     throw lastError;
 }
 
@@ -96,6 +101,7 @@ export const extractActionFromText = async (
         });
     } catch (e) {
         console.error("Action Parsing Error:", e);
+        // Fail silently for action parsing to fallback to normal chat
         return null;
     }
 };
@@ -155,7 +161,7 @@ export const sendMessageToGemini = async (
     });
 
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return { text: "I'm having trouble connecting to the network right now. Please check your connection." };
+    console.error("Gemini Final Error:", error);
+    return { text: "I'm having trouble connecting to the network right now. Please check your connection or try again." };
   }
 };
