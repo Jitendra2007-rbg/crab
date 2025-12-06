@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { 
   MessageSquarePlus, 
@@ -51,7 +50,7 @@ const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       <div className={`
-        fixed inset-y-0 left-0 w-80 bg-white dark:bg-dark-bg 
+        fixed inset-y-0 left-0 w-[85vw] max-w-[20rem] bg-white dark:bg-dark-bg 
         border-r border-gray-200 dark:border-gray-800 
         z-50 transform transition-transform duration-300 ease-in-out 
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}

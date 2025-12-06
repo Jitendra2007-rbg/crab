@@ -1,4 +1,3 @@
-
 import React, { useRef, useEffect, useState } from 'react';
 import { Send, Sparkles, Paperclip, Mic, StopCircle, ArrowUpRight, TrendingUp, TrendingDown, Newspaper, ExternalLink, Sun, Wind, Droplets, Globe } from 'lucide-react';
 import { Message, Sender, Suggestion, AppMode } from '../types';
@@ -20,24 +19,6 @@ const SUGGESTIONS: Suggestion[] = [
     { id: '3', text: "Stock Price", prompt: "Stock price of Tesla" },
     { id: '4', text: "Plan a trip", prompt: "Create a 3-day itinerary for Tokyo" },
 ];
-
-const Typewriter = ({ text }: { text: string }) => {
-  const [display, setDisplay] = useState('');
-  useEffect(() => {
-    let i = 0;
-    setDisplay('');
-    const interval = setInterval(() => {
-      if (i < text.length) {
-        setDisplay(prev => prev + text.charAt(i));
-        i++;
-      } else {
-        clearInterval(interval);
-      }
-    }, 5); 
-    return () => clearInterval(interval);
-  }, [text]);
-  return <p className="whitespace-pre-wrap leading-relaxed">{display}</p>;
-};
 
 // --- Custom Cards ---
 const WeatherCard = ({ data }: { data: any }) => (
@@ -150,7 +131,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
 }) => {
   const [inputText, setInputText] = useState('');
   const [isBotThinking, setIsBotThinking] = useState(false);
-  const [isResearchMode, setIsResearchMode] = useState(false); // New Research Toggle
+  const [isResearchMode, setIsResearchMode] = useState(false); 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined);
@@ -201,7 +182,8 @@ const ChatPage: React.FC<ChatPageProps> = ({
   return (
     <div className="flex flex-col h-full bg-white dark:bg-[#09090b] relative transition-colors duration-300">
       
-      <div className="flex-1 overflow-y-auto p-4 pb-40 no-scrollbar z-10">
+      {/* MESSAGES AREA - Takes available space */}
+      <div className="flex-1 overflow-y-auto p-4 z-10 no-scrollbar pb-24">
         {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center space-y-8 px-4">
                 <div className="w-20 h-20 bg-white dark:bg-[#18181b] rounded-3xl flex items-center justify-center shadow-lg border border-gray-100 dark:border-gray-800">
@@ -242,7 +224,6 @@ const ChatPage: React.FC<ChatPageProps> = ({
         ) : (
             <div className="space-y-8 max-w-3xl mx-auto pt-4">
                 {messages.map((msg, index) => {
-                    const isLastMessage = index === messages.length - 1;
                     const isUser = msg.sender === Sender.USER;
                     return (
                         <div key={msg.id} className={`flex ${isUser ? 'justify-end' : 'justify-start'} group`}>
@@ -252,7 +233,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                                         {msg.attachment && msg.type === 'image' && (
                                             <img src={msg.attachment} alt="Upload" className="mb-3 rounded-lg max-h-60 w-full object-cover border border-white/20" />
                                         )}
-                                        <p className="text-[15px] leading-relaxed font-medium">{msg.text}</p>
+                                        <p className="text-[15px] leading-relaxed font-medium whitespace-pre-wrap">{msg.text}</p>
                                     </div>
                                     <div className="text-[10px] text-gray-400 mt-1 text-right font-mono opacity-0 group-hover:opacity-100 transition-opacity pr-2">
                                         SENT • {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -267,7 +248,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                                         {msg.type === 'research' && msg.metadata && <ResearchCard results={msg.metadata} />}
                                         
                                         <div className="text-gray-900 dark:text-gray-100 text-[15px]">
-                                            {isLastMessage ? <Typewriter text={msg.text} /> : <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>}
+                                            <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
                                         </div>
 
                                         {/* Grounding Source Chips */}
@@ -294,9 +275,9 @@ const ChatPage: React.FC<ChatPageProps> = ({
         )}
       </div>
 
-      {/* INPUT BAR */}
-      <div className="absolute bottom-6 left-0 right-0 px-4 flex justify-center z-50">
-          <div className={`w-full max-w-2xl bg-white/80 dark:bg-[#18181b]/80 backdrop-blur-xl border border-gray-200 dark:border-gray-700 rounded-3xl shadow-xl p-2 transition-all duration-300 ${isDictationMode ? 'ring-2 ring-red-500 shadow-red-500/20' : 'hover:shadow-blue-500/10'}`}>
+      {/* INPUT BAR - In Flow (Bottom) - Made background stronger for better visibility */}
+      <div className="shrink-0 p-4 pt-2 z-50 bg-white/90 dark:bg-black/90 backdrop-blur-md border-t border-gray-100 dark:border-gray-800 pb-safe">
+          <div className={`w-full max-w-2xl mx-auto bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-700 rounded-3xl shadow-xl p-2 transition-all duration-300 ${isDictationMode ? 'ring-2 ring-red-500 shadow-red-500/20' : 'hover:shadow-blue-500/10'}`}>
               
               {selectedImage && (
                   <div className="px-4 pt-2 pb-1 flex justify-between items-center animate-slide-up">

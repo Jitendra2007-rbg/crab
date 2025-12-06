@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ArrowLeft, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -496,7 +495,8 @@ export default function App() {
     >
       
       {currentMode !== AppMode.SCANNER && (
-          <header className="flex items-center justify-between p-4 px-6 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-30">
+          // Added pt-safe class for mobile notch support
+          <header className="flex items-center justify-between p-4 px-6 pt-safe bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-30">
             {historyStack.length === 1 ? (
                 <button onClick={() => setIsSidebarOpen(true)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-700 dark:text-gray-200">
                     <Menu className="w-6 h-6" />
@@ -506,7 +506,7 @@ export default function App() {
                     <ArrowLeft className="w-6 h-6" />
                 </button>
             )}
-            <h1 className="font-bold text-sm tracking-widest text-gray-900 dark:text-white uppercase absolute left-1/2 transform -translate-x-1/2 w-48 text-center truncate">
+            <h1 className="font-bold text-sm tracking-widest text-gray-900 dark:text-white uppercase absolute left-1/2 transform -translate-x-1/2 w-48 text-center truncate pt-safe">
                 {headerTitle}
             </h1>
             <div className="flex items-center">
@@ -530,7 +530,7 @@ export default function App() {
       )}
       
       {toastMessage && (
-          <div className="absolute top-20 left-1/2 transform -translate-x-1/2 bg-black/80 dark:bg-white/90 text-white dark:text-black px-4 py-2 rounded-full text-sm font-semibold shadow-lg z-50 flex items-center space-x-2 animate-slide-up">
+          <div className="absolute top-24 left-1/2 transform -translate-x-1/2 bg-black/80 dark:bg-white/90 text-white dark:text-black px-4 py-2 rounded-full text-sm font-semibold shadow-lg z-50 flex items-center space-x-2 animate-slide-up">
               <CheckCircle size={16} className="text-green-400 dark:text-green-600" /><span>{toastMessage}</span>
           </div>
       )}

@@ -1,9 +1,11 @@
-
 import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
+// User provided API Key
+const API_KEY = 'AIzaSyDuMQT5nckYc69EjDdv0LNtMC3_hq-BN7g';
+
 const getClient = () => {
-  return new GoogleGenAI({ apiKey: process.env.API_KEY });
+  return new GoogleGenAI({ apiKey: API_KEY });
 };
 
 // STRICTER INSTRUCTION for Quality
@@ -130,6 +132,6 @@ export const sendMessageToGemini = async (
 
   } catch (error) {
     console.error("Gemini Error:", error);
-    return { text: "I'm having trouble connecting to the network right now." };
+    return { text: "I'm having trouble connecting to the network right now. Please check your connection." };
   }
 };
