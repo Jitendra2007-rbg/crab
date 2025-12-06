@@ -1,7 +1,8 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
-// User provided API Keys for redundancy and load balancing
+// User provided API Keys for redundancy and load balancing.
+// Hardcoded to ensure browser compatibility (no process.env).
 const API_KEYS = [
   'AIzaSyCRFbLdi34z2uu_UfEICfwVAGA1n_ArUrU',
   'AIzaSyDN2TSZVLkkerNGKyRC2wn7gvbb_IGobzI',
@@ -54,16 +55,18 @@ async function withKeyRotation<T>(operation: (client: GoogleGenAI) => Promise<T>
         
         try {
             const client = new GoogleGenAI({ apiKey });
-            return await operation(client);
+            // Await the operation to ensure we catch failures here
+            const result = await operation(client);
+            return result;
         } catch (err: any) {
             console.warn(`Gemini API Key ${index + 1}/${API_KEYS.length} failed:`, err.message || err);
             lastError = err;
-            // Continue loop to try next key
+            // Loop continues to try next key
         }
     }
     
     // If all keys failed
-    console.error("All API keys failed to respond.");
+    console.error("All Gemini API keys failed to respond. Please check quotas.");
     throw lastError;
 }
 
@@ -115,7 +118,6 @@ export const extractActionFromText = async (
         });
     } catch (e) {
         console.error("Action Parsing Error:", e);
-        // Fail silently for action parsing to fallback to normal chat
         return null;
     }
 };
@@ -137,7 +139,6 @@ export const sendMessageToGemini = async (
 
         let response;
 
-        // Config for natural but accurate conversation
         const genConfig: any = {
             systemInstruction: isResearchMode ? SYSTEM_INSTRUCTION + "\n" + RESEARCH_INSTRUCTION : SYSTEM_INSTRUCTION,
             temperature: 0.4, 
@@ -176,6 +177,6 @@ export const sendMessageToGemini = async (
 
   } catch (error) {
     console.error("Gemini Final Error:", error);
-    return { text: "I'm having trouble connecting to the network right now. Please check your connection or try again." };
+    return { text: "I'm having trouble connecting to the network right now. Please check your connection." };
   }
 };

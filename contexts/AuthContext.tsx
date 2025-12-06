@@ -59,10 +59,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const { error } = await supabase.auth.signInWithOAuth({
           provider: 'google',
           options: {
-            redirectTo: window.location.origin,
+            // CRITICAL: Redirect back to the exact current page origin
+            redirectTo: window.location.origin, 
             queryParams: {
-              access_type: 'offline',
-              prompt: 'select_account', // Forces the browser to show the account picker
+              // CRITICAL: Forces the account picker to appear every time
+              prompt: 'select_account',
+              access_type: 'offline'
             },
           },
         });
