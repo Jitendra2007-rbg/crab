@@ -405,7 +405,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ mode, navigate, isDarkMode,
   }
 
   if (mode === AppMode.SETTINGS_CUSTOMIZATION) {
-      const fonts: AppFont[] = ['Inter', 'Roboto Mono', 'Merriweather', 'Quicksand', 'Orbitron'];
+      const fonts: AppFont[] = ['Normal', 'Inter', 'Roboto Mono', 'Merriweather', 'Quicksand', 'Orbitron'];
 
       return (
           <div className="p-6 h-full overflow-y-auto bg-gray-50 dark:bg-dark-bg animate-slide-in">
@@ -445,7 +445,7 @@ const SettingsPage: React.FC<SettingsPageProps> = ({ mode, navigate, isDarkMode,
                              onClick={() => updateSettings({...settings, font})}
                              className={`w-full flex items-center justify-between p-3 rounded-xl transition-all ${settings.font === font ? 'bg-black dark:bg-white text-white dark:text-black shadow-lg' : 'hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
                          >
-                             <span style={{ fontFamily: font }}>{font}</span>
+                             <span style={{ fontFamily: font === 'Normal' ? 'sans-serif' : font }}>{font}</span>
                              {settings.font === font && <Check size={16} />}
                          </button>
                      ))}

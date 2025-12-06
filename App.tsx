@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useRef } from 'react';
 import { Menu, ArrowLeft, AlertTriangle, CheckCircle, Activity } from 'lucide-react';
 import Sidebar from './components/Sidebar';
@@ -131,15 +130,12 @@ export default function App() {
 
   // 1. Auto-Start Listening (Wakeword) & Resume on Visibility
   useEffect(() => {
-      // Logic: If user is logged in, we want to be listening for "Hey CRAB"
-      // CHECK PERMISSION: Only start if settings.enableMic is true
       if (user && !isListening && !isAssistantOpen && !isSpeaking && !isDictationMode && settings.enableMic) {
           startListening(true);
       }
       
       const handleVisibilityChange = () => {
           if (document.visibilityState === 'visible') {
-              // FORCE RESTART: The "Resurrection" logic
               console.log("App visible - Resurrecting Microphone");
               if (!isListening && settings.enableMic) {
                  setTimeout(() => startListening(true), 50);
@@ -183,7 +179,6 @@ export default function App() {
     } 
     // CASE B: Assistant OPEN -> Conversation Loop
     else {
-        // Debounce reduced to 400ms for faster replies as requested
         if (
             lowerTranscript !== lastProcessedTranscript.current && 
             !isSpeaking && 
@@ -193,7 +188,7 @@ export default function App() {
                  if (transcript.toLowerCase().trim() === lowerTranscript && lowerTranscript.length > 0) {
                      handleAssistantConversation(lowerTranscript);
                  }
-             }, 400); // 400ms debounce (faster)
+             }, 400); 
 
              return () => clearTimeout(timeoutId);
         }
@@ -211,7 +206,6 @@ export default function App() {
   const handleAssistantConversation = async (rawText: string) => {
       if (processingRef.current) return;
       
-      // ECHO CANCELLATION
       const lastAi = lastAiResponseRef.current || '';
       const normInput = rawText.replace(/[^a-z0-9]/gi, '').toLowerCase();
       const normLast = lastAi.replace(/[^a-z0-9]/gi, '').toLowerCase();
@@ -242,7 +236,6 @@ export default function App() {
           reply = await handleVoiceChat(rawText);
       }
 
-      // Store response for echo checking next turn
       lastAiResponseRef.current = reply;
 
       speak(reply, settings.voiceId, () => {
@@ -253,14 +246,13 @@ export default function App() {
 
   const executeNativeIntent = async (intent: ActionIntent): Promise<string> => {
        const handleLaunch = (callback: () => void) => {
-           // Execute launch immediately. 
            callback();
        };
 
        switch (intent.type) {
             case 'READ_SCREEN':
                 const base64 = await captureScreen();
-                if (base64) return await sendMessageToGemini([...messages], "Describe screen.", base64);
+                if (base64) return (await sendMessageToGemini([...messages], "Describe screen.", base64)).text;
                 return "Screen capture failed.";
             case 'START_WORKOUT':
                 startGym(); navigate(AppMode.GYM); return "Gym started.";
@@ -301,7 +293,7 @@ export default function App() {
               setMessages(prev => [...prev, userMsg, { id: Date.now().toString(), text: reply, sender: Sender.BOT, timestamp: Date.now() }]);
               return reply;
           } else {
-              const response = await sendMessageToGemini([...messages, userMsg], text);
+              const { text: response } = await sendMessageToGemini([...messages, userMsg], text);
               setMessages(prev => [...prev, userMsg, { id: Date.now().toString(), text: response, sender: Sender.BOT, timestamp: Date.now() }]);
               return response;
           }
@@ -312,7 +304,6 @@ export default function App() {
 
   // --- Image Analysis Handler (For Scanner) ---
   const handleImageAnalysis = async (base64: string, prompt: string): Promise<string> => {
-      // 1. Add User Image Message to Chat
       const userMsg: Message = { 
           id: Date.now().toString(), 
           text: "Scanned Image", 
@@ -325,11 +316,9 @@ export default function App() {
       const updatedHistory = [...messages, userMsg];
       setMessages(updatedHistory);
       
-      // 2. Call Gemini
       try {
-          const response = await sendMessageToGemini(updatedHistory, prompt, base64);
+          const { text: response } = await sendMessageToGemini(updatedHistory, prompt, base64);
           
-          // 3. Add Bot Response
           const botMsg: Message = { 
               id: (Date.now()+1).toString(), 
               text: response, 
@@ -339,7 +328,6 @@ export default function App() {
           
           setMessages(prev => [...prev, botMsg]);
           
-          // 4. Update Session Title if new
           const newSessionTitle = messages.length === 0 ? "Scan Analysis" : sessionTitle;
           if (messages.length === 0) setSessionTitle(newSessionTitle);
           
@@ -375,7 +363,7 @@ export default function App() {
       }
       else if (action.actionType === 'FETCH_WEB_SEARCH') {
           const results = await searchWeb(action.data.query);
-          const summary = await sendMessageToGemini(history, `Summarize this search result in 1 sentence: ${JSON.stringify(results)}`);
+          const { text: summary } = await sendMessageToGemini(history, `Summarize this search result in 1 sentence: ${JSON.stringify(results)}`);
           responseText = summary;
       }
       return responseText;
@@ -388,7 +376,8 @@ export default function App() {
   }, [isDarkMode]);
 
   // --- Text Command Handler (Typing) ---
-  const handleTextCommand = async (text: string) => {
+  // Updated to accept isResearchMode flag
+  const handleTextCommand = async (text: string, isResearchMode: boolean = false) => {
     if (!text.trim()) return;
     const intent = processNativeCommands(text);
     if (intent.type !== 'NONE' && intent.type !== 'STOP_LISTENING') {
@@ -405,18 +394,30 @@ export default function App() {
     try {
         const actionResponse = await extractActionFromText(updatedHistory, text);
         let responseText = "";
-        if (actionResponse && actionResponse.hasAction) responseText = await handleComplexAction(actionResponse, updatedHistory);
-        else {
-            responseText = await sendMessageToGemini(messages, text);
-            setMessages([...updatedHistory, { id: (Date.now()+1).toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now() }]);
+        let groundingData = undefined;
+
+        if (actionResponse && actionResponse.hasAction) {
+            responseText = await handleComplexAction(actionResponse, updatedHistory);
+        } else {
+            const result = await sendMessageToGemini(messages, text, undefined, isResearchMode);
+            responseText = result.text;
+            groundingData = result.groundingMetadata;
         }
+        
+        setMessages([...updatedHistory, { 
+            id: (Date.now()+1).toString(), 
+            text: responseText, 
+            sender: Sender.BOT, 
+            timestamp: Date.now(),
+            groundingMetadata: groundingData
+        }]);
         
         let title = sessionTitle;
         if (updatedHistory.length === 1) {
             title = text.substring(0, 30) + (text.length > 30 ? '...' : '');
             setSessionTitle(title);
         }
-        saveChatSession(title, [...updatedHistory, { id: Date.now().toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now() }], currentSessionId || undefined)
+        saveChatSession(title, [...updatedHistory, { id: Date.now().toString(), text: responseText, sender: Sender.BOT, timestamp: Date.now(), groundingMetadata: groundingData }], currentSessionId || undefined)
             .then(savedId => { if (savedId && !savedId.startsWith('local')) setCurrentSessionId(savedId); });
     } catch (e) {
         setMessages([...updatedHistory, { id: Date.now().toString(), text: "Network Error", sender: Sender.BOT, timestamp: Date.now() }]);
@@ -437,17 +438,13 @@ export default function App() {
       navigate(AppMode.CHAT); 
   };
   
-  // FIXED: Renaming works for unsaved chats too
   const handleRenameSession = () => {
       const newTitle = prompt("Enter new chat name:", sessionTitle);
       if (newTitle && newTitle.trim().length > 0) {
-          setSessionTitle(newTitle); // Immediate UI update
-          
+          setSessionTitle(newTitle); 
           if (messages.length > 0) {
-              // Save to DB
               saveChatSession(newTitle, messages, currentSessionId || undefined)
                 .then(id => {
-                    // Update ID if it was a new session
                     if(!currentSessionId) setCurrentSessionId(id);
                 });
           }
@@ -476,7 +473,8 @@ export default function App() {
           case 'Roboto Mono': return '"Roboto Mono", monospace';
           case 'Merriweather': return '"Merriweather", serif';
           case 'Quicksand': return '"Quicksand", sans-serif';
-          case 'Orbitron': return '"Orbitron", sans-serif'; // Added Orbitron
+          case 'Orbitron': return '"Orbitron", sans-serif';
+          case 'Normal': return 'sans-serif'; // System default
           case 'Inter':
           default: return '"Inter", sans-serif';
       }
@@ -492,13 +490,11 @@ export default function App() {
   else if (currentMode !== AppMode.HISTORY_VIEW) headerTitle = currentMode.replace('SETTINGS_', '').replace('_', ' ');
 
   return (
-    // APP-WIDE FONT APPLICATION
     <div 
         className="flex flex-col h-full relative bg-white dark:bg-black transition-colors duration-300"
         style={{ fontFamily: getFontFamily() }}
     >
       
-      {/* Header */}
       {currentMode !== AppMode.SCANNER && (
           <header className="flex items-center justify-between p-4 px-6 bg-white/80 dark:bg-black/80 backdrop-blur-md border-b border-gray-100 dark:border-gray-800 sticky top-0 z-30">
             {historyStack.length === 1 ? (
@@ -546,7 +542,7 @@ export default function App() {
             setIsDarkMode={setIsDarkMode}
             messages={messages}
             onSendMessage={handleTextCommand}
-            onImageAnalysis={handleImageAnalysis} // Passed Handler
+            onImageAnalysis={handleImageAnalysis} 
             sessionTitle={sessionTitle}
             
             reminders={reminders}

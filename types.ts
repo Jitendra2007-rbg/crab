@@ -1,5 +1,4 @@
 
-
 export enum Sender {
   USER = 'user',
   BOT = 'bot'
@@ -13,6 +12,7 @@ export interface Message {
   type?: 'text' | 'image' | 'audio' | 'weather' | 'news' | 'stock' | 'research';
   attachment?: string; // base64 for images
   metadata?: any; // Stores the raw weather/news/stock/search object
+  groundingMetadata?: any; // Stores sources from research
 }
 
 export interface ChatSession {
@@ -79,7 +79,7 @@ export interface NotificationItem {
 }
 
 export type PlanType = 'FREE' | 'PRO' | 'ULTRA';
-export type AppFont = 'Inter' | 'Roboto Mono' | 'Merriweather' | 'Quicksand' | 'Orbitron';
+export type AppFont = 'Inter' | 'Roboto Mono' | 'Merriweather' | 'Quicksand' | 'Orbitron' | 'Normal';
 
 export interface UserSettings {
   userName: string; // The user's display name

@@ -1,5 +1,4 @@
 
-
 import React from 'react';
 import { AppMode, Message, Reminder, ScheduleItem, ChatSession, NotificationItem, UserSettings, HealthStats, WorkoutSession, ExerciseType } from './types';
 import ChatPage from './pages/ChatPage';
@@ -21,7 +20,7 @@ interface RouterProps {
   
   // Chat
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, isResearchMode: boolean) => void;
   onImageAnalysis: (base64: string, prompt: string) => Promise<string>;
   sessionTitle: string;
   

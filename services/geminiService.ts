@@ -3,19 +3,27 @@ import { GoogleGenAI } from "@google/genai";
 import { Message, Sender, AIActionResponse } from "../types";
 
 const getClient = () => {
-  // Use process.env.API_KEY as per guidelines
   return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
+// STRICTER INSTRUCTION for Quality
 const SYSTEM_INSTRUCTION = `
-You are CRAB (Cosmic Responsive AI Base), an advanced and helpful AI assistant.
+You are CRAB (Cosmic Responsive AI Base).
 
-CORE BEHAVIORS:
-1. **PROFESSIONALISM**: Your responses must be grammatically perfect, well-structured, and helpful. Avoid spelling errors completely.
-2. **CLARITY**: Explain concepts clearly similar to Perplexity AI or Gemini. Use paragraphs where necessary.
-3. **TONE**: Be friendly, intelligent, and precise.
-4. **FORMATTING**: You may use standard text formatting. If the user asks for code, provide it. If they ask for a list, use a list.
-5. **CONCISENESS**: While you should be detailed, avoid unnecessary fluff. Get straight to the answer.
+STRICT OUTPUT RULES:
+1. **PERFECT GRAMMAR & SPELLING**: Do not make spelling mistakes. Use proper punctuation.
+2. **MEANINGFUL CONTENT**: Do not use filler words or meaningless phrases. Be direct, intelligent, and helpful.
+3. **CONCISENESS**: Provide the answer clearly. Do not ramble.
+4. **FORMATTING**: Use paragraphs, lists, and bold text for readability.
+5. **ACCURACY**: If you don't know something, admit it or ask for clarification. Do not hallucinate.
+`;
+
+const RESEARCH_INSTRUCTION = `
+You are in RESEARCH MODE.
+1. Use the provided Google Search tools to find the most recent and accurate information.
+2. Cite your sources implicitly by mentioning where information comes from if relevant.
+3. Provide a comprehensive summary of the findings.
+4. Ensure all facts are up-to-date.
 `;
 
 const ACTION_PARSER_INSTRUCTION = `
@@ -51,7 +59,7 @@ export const extractActionFromText = async (
             config: {
                 systemInstruction: ACTION_PARSER_INSTRUCTION,
                 responseMimeType: 'application/json',
-                temperature: 0.1 // Very low temp for strict JSON parsing
+                temperature: 0.1 
             }
         });
 
@@ -67,11 +75,13 @@ export const extractActionFromText = async (
 export const sendMessageToGemini = async (
   history: Message[],
   newMessage: string,
-  base64Image?: string
-): Promise<string> => {
+  base64Image?: string,
+  isResearchMode: boolean = false
+): Promise<{ text: string, groundingMetadata?: any }> => {
   try {
     const client = getClient();
-    // Include more history for better context
+    
+    // Only send last 10 messages to keep context relevant and reduce latency
     const recentHistory = history.slice(-10).map(msg => 
       `${msg.sender === Sender.USER ? 'User' : 'CRAB'}: ${msg.text}`
     ).join('\n');
@@ -80,16 +90,20 @@ export const sendMessageToGemini = async (
 
     let response;
 
-    // Config for natural conversation
-    const genConfig = {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.7, // Higher temperature for more natural, creative language
+    // Config for natural but accurate conversation
+    const genConfig: any = {
+        systemInstruction: isResearchMode ? SYSTEM_INSTRUCTION + "\n" + RESEARCH_INSTRUCTION : SYSTEM_INSTRUCTION,
+        temperature: 0.4, // Lower temperature for more accurate/proper responses
         topK: 40,
         topP: 0.95,
     };
 
+    // Add Research Tool if enabled
+    if (isResearchMode) {
+        genConfig.tools = [{ googleSearch: {} }];
+    }
+
     if (base64Image) {
-        // Use gemini-2.5-flash for vision tasks (text from image) as per guidelines
         response = await client.models.generateContent({
             model: 'gemini-2.5-flash',
             contents: {
@@ -108,9 +122,14 @@ export const sendMessageToGemini = async (
         });
     }
 
-    return response.text || "I didn't catch that.";
+    // Return text and grounding chunks if available (URLs)
+    return {
+        text: response.text || "I didn't catch that.",
+        groundingMetadata: response.candidates?.[0]?.groundingMetadata?.groundingChunks
+    };
+
   } catch (error) {
     console.error("Gemini Error:", error);
-    return "I'm having trouble connecting to the network.";
+    return { text: "I'm having trouble connecting to the network right now." };
   }
 };

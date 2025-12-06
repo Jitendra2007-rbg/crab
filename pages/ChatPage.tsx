@@ -5,7 +5,7 @@ import { Message, Sender, Suggestion, AppMode } from '../types';
 
 interface ChatPageProps {
   messages: Message[];
-  onSendMessage: (text: string) => void;
+  onSendMessage: (text: string, isResearchMode: boolean) => void;
   sessionTitle: string;
   transcript: string;
   isListening: boolean;
@@ -33,7 +33,7 @@ const Typewriter = ({ text }: { text: string }) => {
       } else {
         clearInterval(interval);
       }
-    }, 5); // Faster typing
+    }, 5); 
     return () => clearInterval(interval);
   }, [text]);
   return <p className="whitespace-pre-wrap leading-relaxed">{display}</p>;
@@ -118,12 +118,39 @@ const ResearchCard = ({ results }: { results: any[] }) => (
     </div>
 );
 
+// Source Chips Component
+const SourceChips = ({ chunks }: { chunks: any[] }) => {
+    if (!chunks || chunks.length === 0) return null;
+    return (
+        <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-gray-100 dark:border-gray-800">
+            {chunks.map((chunk, i) => {
+                const url = chunk.web?.uri;
+                const title = chunk.web?.title || "Source " + (i+1);
+                if (!url) return null;
+                return (
+                    <a 
+                        key={i} 
+                        href={url} 
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center space-x-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 hover:bg-blue-50 dark:hover:bg-blue-900/30 text-gray-600 dark:text-gray-400 text-[10px] rounded-md transition-colors border border-transparent hover:border-blue-200 dark:hover:border-blue-800"
+                    >
+                        <Globe size={10} />
+                        <span className="truncate max-w-[150px]">{title}</span>
+                    </a>
+                );
+            })}
+        </div>
+    );
+};
+
 const ChatPage: React.FC<ChatPageProps> = ({ 
     messages, onSendMessage, sessionTitle,
     transcript, isListening, isDictationMode, toggleDictation, navigate
 }) => {
   const [inputText, setInputText] = useState('');
   const [isBotThinking, setIsBotThinking] = useState(false);
+  const [isResearchMode, setIsResearchMode] = useState(false); // New Research Toggle
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedImage, setSelectedImage] = useState<string | undefined>(undefined);
@@ -159,7 +186,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
     const tempText = inputText;
     setInputText('');
     setSelectedImage(undefined);
-    onSendMessage(tempText);
+    onSendMessage(tempText, isResearchMode);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -172,23 +199,19 @@ const ChatPage: React.FC<ChatPageProps> = ({
   };
 
   return (
-    // CLEAN INTERFACE: No background patterns, no pulses
     <div className="flex flex-col h-full bg-white dark:bg-[#09090b] relative transition-colors duration-300">
       
-      <div className="flex-1 overflow-y-auto p-4 pb-32 no-scrollbar z-10">
+      <div className="flex-1 overflow-y-auto p-4 pb-40 no-scrollbar z-10">
         {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center space-y-8 px-4">
-                {/* Static Logo Icon */}
                 <div className="w-20 h-20 bg-white dark:bg-[#18181b] rounded-3xl flex items-center justify-center shadow-lg border border-gray-100 dark:border-gray-800">
                     <Sparkles className="w-8 h-8 text-black dark:text-white" strokeWidth={1.5} />
                 </div>
                 
-                {/* Simple Text */}
                 <h2 className="text-2xl font-medium text-gray-900 dark:text-white tracking-tight">
                     System Online
                 </h2>
                 
-                {/* Suggestions Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 w-full max-w-md">
                     {SUGGESTIONS.map((s) => (
                         <div 
@@ -196,7 +219,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                             className="group relative flex items-center bg-white dark:bg-[#18181b] border border-gray-200 dark:border-gray-800 rounded-xl hover:border-blue-500 dark:hover:border-blue-500 transition-colors cursor-pointer shadow-sm"
                         >
                             <button
-                                onClick={() => onSendMessage(s.prompt)}
+                                onClick={() => onSendMessage(s.prompt, isResearchMode)}
                                 className="flex-1 text-left p-4 text-sm font-medium text-gray-600 dark:text-gray-300 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors z-10 outline-none"
                             >
                                 {s.text}
@@ -246,6 +269,9 @@ const ChatPage: React.FC<ChatPageProps> = ({
                                         <div className="text-gray-900 dark:text-gray-100 text-[15px]">
                                             {isLastMessage ? <Typewriter text={msg.text} /> : <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>}
                                         </div>
+
+                                        {/* Grounding Source Chips */}
+                                        {msg.groundingMetadata && <SourceChips chunks={msg.groundingMetadata} />}
                                     </div>
                                 </div>
                             )}
@@ -257,7 +283,9 @@ const ChatPage: React.FC<ChatPageProps> = ({
                     <div className="flex justify-start pl-1">
                          <div className="flex items-center space-x-3">
                              <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
-                             <span className="text-xs font-mono text-gray-400 uppercase tracking-widest">Thinking...</span>
+                             <span className="text-xs font-mono text-gray-400 uppercase tracking-widest">
+                                 {isResearchMode ? "Researching..." : "Thinking..."}
+                             </span>
                          </div>
                     </div>
                 )}
@@ -281,6 +309,15 @@ const ChatPage: React.FC<ChatPageProps> = ({
 
               <div className="flex items-end space-x-2">
                   <div className="flex-1 flex items-center bg-transparent px-2">
+                       {/* Research Toggle */}
+                       <button 
+                           onClick={() => setIsResearchMode(!isResearchMode)}
+                           className={`p-3 mr-1 transition-colors rounded-xl ${isResearchMode ? 'text-blue-500 bg-blue-50 dark:bg-blue-900/20' : 'text-gray-400 hover:text-gray-900 dark:hover:text-white'}`}
+                           title="Research Mode"
+                       >
+                           <Globe size={20} />
+                       </button>
+
                        <button onClick={() => fileInputRef.current?.click()} className="p-3 text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors">
                            <Paperclip size={20} />
                        </button>
@@ -291,7 +328,7 @@ const ChatPage: React.FC<ChatPageProps> = ({
                            value={inputText}
                            onChange={(e) => setInputText(e.target.value)}
                            onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
-                           placeholder={isDictationMode ? "Listening..." : "Type a command..."}
+                           placeholder={isDictationMode ? "Listening..." : (isResearchMode ? "Ask a research question..." : "Type a command...")}
                            className="flex-1 bg-transparent py-4 px-2 outline-none text-gray-900 dark:text-white placeholder-gray-400 text-base"
                        />
                   </div>
